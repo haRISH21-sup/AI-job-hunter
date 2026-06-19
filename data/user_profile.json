@@ -1,0 +1,38 @@
+{
+    "name": "Harish",
+    "skills": [
+        "Python",
+        "Linux",
+        "Windows",
+        "Networking",
+        "Cybersecurity",
+        "TCP/IP",
+        "Firewall",
+        "OPNsense",
+        "Virtualization",
+        "SIEM",
+        "SOC",
+        "DNS",
+        "DHCP",
+        "Wireshark",
+        "Nmap",
+        "Switching",
+        "Routing"
+    ],
+
+    "target_roles": [
+        "SOC Analyst",
+        "Cyber Security Analyst",
+        "Network Engineer",
+        "NOC Engineer",
+        "System Administrator",
+        "IT Support Engineer"
+    ],
+
+    "preferred_locations": [
+        "Bengaluru",
+        "Hyderabad",
+        "Chennai",
+        "Pune"
+    ]
+}
