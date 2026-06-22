@@ -11,10 +11,7 @@ def save_job(
 
     initialize_database()
 
-    match_score = float(match_score)
-
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -32,13 +29,26 @@ def save_job(
         company,
         location,
         description,
-        match_score
+        float(match_score)
     ))
 
     conn.commit()
     conn.close()
 
-    print(f"Saved: {job_title}")
+
+def clear_jobs():
+
+    initialize_database()
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM jobs")
+
+    conn.commit()
+
+    conn.close()
 
 
 def view_jobs():
@@ -57,24 +67,21 @@ def view_jobs():
         match_score
     FROM jobs
     ORDER BY match_score DESC
+    LIMIT 20
     """)
 
     rows = cursor.fetchall()
 
     conn.close()
 
-    print("\n===== TOP MATCHING JOBS =====\n")
-
-    if not rows:
-        print("No Jobs Found")
-        return
+    print("\n===== TOP REAL JOB MATCHES =====\n")
 
     for row in rows:
 
         print(
-            f"Title: {row[0]}\n"
+            f"{row[0]}\n"
             f"Company: {row[1]}\n"
             f"Location: {row[2]}\n"
-            f"Match Score: {float(row[3]):.2f}%\n"
-            f"{'-'*40}"
+            f"Match: {float(row[3]):.2f}%\n"
+            f"{'-'*50}"
         )
