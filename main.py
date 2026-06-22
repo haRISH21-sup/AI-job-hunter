@@ -2,17 +2,77 @@ from scripts.resume_reader import read_resume
 from scripts.job_matcher import calculate_match
 from scripts.job_api_collector import collect_real_jobs
 from scripts.skill_extractor import extract_skills
+from scripts.ats_rewriter import (
+    generate_summary,
+    prioritize_skills
+)
 from scripts.resume_generator import generate_resume
+from scripts.docx_resume_generator import (
+    generate_docx_resume
+)
+from scripts.cover_letter_generator import (
+    generate_cover_letter
+)
+from scripts.docx_cover_letter_generator import (
+    generate_docx_cover_letter
+)
+from scripts.interview_question_generator import (
+    generate_interview_questions
+)
+from scripts.interview_answer_generator import (
+    generate_interview_answers
+)
+from scripts.skill_gap_analyzer import (
+    analyze_skill_gap
+)
+from scripts.ats_score_analyzer import (
+    generate_ats_report
+)
+from scripts.application_package_generator import (
+    create_application_package
+)
+from scripts.job_cleaner import (
+    remove_duplicate_jobs
+)
+from scripts.job_database import (
+    save_job,
+    clear_jobs,
+    view_jobs
+)
+from scripts.export_jobs import (
+    export_jobs_to_excel
+)
 
+# Read Resume
 resume_text = read_resume(
     "resumes/Resume.pdf"
 )
 
+# Resume Skills
+resume_skills = extract_skills(
+    resume_text
+)
+
+# Clear Jobs
+clear_jobs()
+
+# Collect Jobs
 jobs = collect_real_jobs()
 
-print("\n===== GENERATING ATS RESUMES =====\n")
+# Remove Duplicates
+jobs = remove_duplicate_jobs(
+    jobs
+)
+
+print(
+    f"\nUnique Jobs: {len(jobs)}"
+)
 
 generated = 0
+
+print(
+    "\n===== PROCESSING JOBS =====\n"
+)
 
 for job in jobs:
 
@@ -21,30 +81,91 @@ for job in jobs:
         job["description"]
     )
 
-    if score < 60:
-        continue
-
-    skills = extract_skills(
-        job["description"]
-    )
-
-    generate_resume(
+    save_job(
         job["job_title"],
         job["company"],
-        skills
+        job["location"],
+        job["description"],
+        score,
+        job["apply_url"]
     )
 
-    print(
-        f"{job['job_title']} | "
-        f"{job['company']} | "
-        f"{score}%"
-    )
+    if score >= 60:
 
-    generated += 1
+        skills = extract_skills(
+            job["description"]
+        )
 
-    if generated >= 5:
-        break
+        prioritized_skills = prioritize_skills(
+            skills
+        )
+
+        summary = generate_summary(
+            prioritized_skills
+        )
+
+        generate_resume(
+            job["job_title"],
+            job["company"],
+            summary,
+            prioritized_skills
+        )
+
+        generate_docx_resume(
+            job["job_title"],
+            job["company"],
+            summary,
+            prioritized_skills
+        )
+
+        generate_cover_letter(
+            job["company"],
+            job["job_title"],
+            prioritized_skills
+        )
+
+        generate_docx_cover_letter(
+            job["company"],
+            job["job_title"],
+            prioritized_skills
+        )
+
+        generate_interview_questions(
+            job["job_title"],
+            job["company"]
+        )
+
+        generate_interview_answers(
+            job["job_title"],
+            job["company"]
+        )
+
+        analyze_skill_gap(
+            job["company"],
+            job["job_title"],
+            resume_skills,
+            job["description"]
+        )
+
+        generate_ats_report(
+            job["company"],
+            job["job_title"],
+            resume_skills,
+            job["description"],
+            score
+        )
+
+        create_application_package(
+            job["company"],
+            job["job_title"]
+        )
+
+        generated += 1
 
 print(
     f"\nGenerated {generated} ATS resumes."
 )
+
+view_jobs()
+
+export_jobs_to_excel()

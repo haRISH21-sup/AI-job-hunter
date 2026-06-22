@@ -4,6 +4,7 @@ from fpdf import FPDF
 def generate_resume(
     job_title,
     company,
+    summary,
     skills
 ):
 
@@ -11,13 +12,23 @@ def generate_resume(
 
     pdf.add_page()
 
-    pdf.set_font("Arial", size=12)
+    pdf.set_font(
+        "Arial",
+        "B",
+        16
+    )
 
     pdf.cell(
         200,
         10,
         txt="Hari Prasad MR",
         ln=True
+    )
+
+    pdf.set_font(
+        "Arial",
+        "",
+        12
     )
 
     pdf.cell(
@@ -34,25 +45,58 @@ def generate_resume(
         ln=True
     )
 
-    pdf.ln(10)
+    pdf.ln(5)
+
+    pdf.set_font(
+        "Arial",
+        "B",
+        12
+    )
+
+    pdf.cell(
+        200,
+        10,
+        txt="Professional Summary",
+        ln=True
+    )
+
+    pdf.set_font(
+        "Arial",
+        "",
+        11
+    )
 
     pdf.multi_cell(
         0,
-        10,
-        txt=
-        "Network Engineer with hands-on experience in "
-        "network monitoring, SIEM monitoring, Linux, "
-        "OPNsense Firewall, Wireshark, Nmap, "
-        "Kaspersky KUMA SIEM, DNS, DHCP, "
-        "Routing, Switching and Cyber Security."
+        8,
+        summary
     )
 
     pdf.ln(5)
 
-    pdf.multi_cell(
-        0,
+    pdf.set_font(
+        "Arial",
+        "B",
+        12
+    )
+
+    pdf.cell(
+        200,
         10,
-        txt=f"Relevant Skills: {skills}"
+        txt="Relevant Skills",
+        ln=True
+    )
+
+    pdf.set_font(
+        "Arial",
+        "",
+        11
+    )
+
+    pdf.multi_cell(
+    0,
+    8,
+    ", ".join(skills)
     )
 
     filename = (
@@ -60,7 +104,11 @@ def generate_resume(
         f"{company}_{job_title}.pdf"
     )
 
-    filename = filename.replace("/", "_")
+    filename = (
+        filename
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
 
     pdf.output(filename)
 

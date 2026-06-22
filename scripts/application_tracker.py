@@ -1,10 +1,14 @@
-from scripts.database import get_connection, initialize_database
+from datetime import date
+
+from scripts.database import (
+    get_connection,
+    initialize_database
+)
 
 
 def add_application(
         company,
         job_title,
-        date_applied,
         status="Applied",
         notes=""
 ):
@@ -12,7 +16,6 @@ def add_application(
     initialize_database()
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     try:
@@ -30,22 +33,19 @@ def add_application(
         """, (
             company,
             job_title,
-            date_applied,
+            str(date.today()),
             status,
             notes
         ))
 
-        conn.commit()
-
         print("Application Added Successfully")
 
-    except Exception:
+    except:
 
         print("Application Already Exists")
 
-    finally:
-
-        conn.close()
+    conn.commit()
+    conn.close()
 
 
 def view_applications():
@@ -53,7 +53,6 @@ def view_applications():
     initialize_database()
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -64,6 +63,7 @@ def view_applications():
         status,
         notes
     FROM applications
+    ORDER BY date_applied DESC
     """)
 
     rows = cursor.fetchall()
@@ -71,11 +71,6 @@ def view_applications():
     conn.close()
 
     print("\n===== APPLICATIONS =====\n")
-
-    if not rows:
-
-        print("No Applications Found")
-        return
 
     for row in rows:
 
@@ -89,12 +84,13 @@ def view_applications():
         )
 
 
-def update_status(company, job_title, new_status):
-
-    initialize_database()
+def update_status(
+        company,
+        job_title,
+        new_status
+):
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -109,31 +105,6 @@ def update_status(company, job_title, new_status):
     ))
 
     conn.commit()
-
     conn.close()
 
     print("Status Updated")
-
-
-def delete_application(company, job_title):
-
-    initialize_database()
-
-    conn = get_connection()
-
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    DELETE FROM applications
-    WHERE company = ?
-    AND job_title = ?
-    """, (
-        company,
-        job_title
-    ))
-
-    conn.commit()
-
-    conn.close()
-
-    print("Application Deleted")

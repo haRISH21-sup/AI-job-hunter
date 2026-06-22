@@ -13,7 +13,6 @@ def initialize_database():
     os.makedirs("database", exist_ok=True)
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -48,7 +47,9 @@ def initialize_database():
 
         description TEXT,
 
-        match_score REAL
+        match_score REAL,
+
+        apply_url TEXT
     )
     """)
 

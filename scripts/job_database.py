@@ -6,7 +6,8 @@ def save_job(
         company,
         location,
         description,
-        match_score
+        match_score,
+        apply_url
 ):
 
     initialize_database()
@@ -21,15 +22,17 @@ def save_job(
         company,
         location,
         description,
-        match_score
+        match_score,
+        apply_url
     )
-    VALUES (?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?)
     """, (
         job_title,
         company,
         location,
         description,
-        float(match_score)
+        float(match_score),
+        apply_url
     ))
 
     conn.commit()
@@ -64,7 +67,8 @@ def view_jobs():
         job_title,
         company,
         location,
-        match_score
+        match_score,
+        apply_url
     FROM jobs
     ORDER BY match_score DESC
     LIMIT 20
@@ -79,9 +83,10 @@ def view_jobs():
     for row in rows:
 
         print(
-            f"{row[0]}\n"
+            f"Title: {row[0]}\n"
             f"Company: {row[1]}\n"
             f"Location: {row[2]}\n"
             f"Match: {float(row[3]):.2f}%\n"
+            f"Apply Link: {row[4]}\n"
             f"{'-'*50}"
         )

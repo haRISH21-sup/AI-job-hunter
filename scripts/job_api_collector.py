@@ -34,27 +34,90 @@ def collect_real_jobs():
             f"&content-type=application/json"
         )
 
-        response = requests.get(url)
+        try:
+
+            response = requests.get(
+                url,
+                timeout=15
+            )
+
+            print(
+                f"Status Code: {response.status_code}"
+            )
+
+        except Exception as e:
+
+            print(
+                f"Error for {search}: {e}"
+            )
+
+            continue
 
         if response.status_code != 200:
-            print(f"Failed: {search}")
+
+            print(
+                f"Failed Request for {search}"
+            )
+
             continue
 
-        data = response.json()
+        try:
+
+            data = response.json()
+
+        except Exception as e:
+
+            print(
+                f"JSON Error for {search}: {e}"
+            )
+
+            continue
 
         if "results" not in data:
+
+            print(
+                f"No Results Key Found for {search}"
+            )
+
             continue
+
+        print(
+            f"Jobs Found: {len(data['results'])}"
+        )
 
         for job in data["results"]:
 
             jobs.append({
-                "job_title": job.get("title", ""),
-                "company": job.get("company", {}).get("display_name", ""),
-                "location": job.get("location", {}).get("display_name", ""),
-                "description": job.get("description", ""),
-                "apply_url": job.get("redirect_url", "")
+                "job_title": job.get(
+                    "title",
+                    ""
+                ),
+                "company": job.get(
+                    "company",
+                    {}
+                ).get(
+                    "display_name",
+                    ""
+                ),
+                "location": job.get(
+                    "location",
+                    {}
+                ).get(
+                    "display_name",
+                    ""
+                ),
+                "description": job.get(
+                    "description",
+                    ""
+                ),
+                "apply_url": job.get(
+                    "redirect_url",
+                    ""
+                )
             })
 
-    print(f"\nTotal Jobs Collected: {len(jobs)}")
+    print(
+        f"\nTotal Jobs Collected: {len(jobs)}"
+    )
 
     return jobs
