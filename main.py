@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+
 from scripts.resume_reader import read_resume
 from scripts.job_matcher import calculate_match
 from scripts.job_api_collector import collect_real_jobs
@@ -31,6 +34,9 @@ from scripts.ats_score_analyzer import (
 from scripts.application_package_generator import (
     create_application_package
 )
+from scripts.summary_email_notifier import (
+    send_summary_email
+)
 from scripts.job_cleaner import (
     remove_duplicate_jobs
 )
@@ -43,17 +49,31 @@ from scripts.export_jobs import (
     export_jobs_to_excel
 )
 
+load_dotenv()
+
+EMAIL_SENDER = os.getenv(
+    "EMAIL_SENDER"
+)
+
+EMAIL_PASSWORD = os.getenv(
+    "EMAIL_PASSWORD"
+)
+
+EMAIL_RECEIVER = os.getenv(
+    "EMAIL_RECEIVER"
+)
+
 # Read Resume
 resume_text = read_resume(
     "resumes/Resume.pdf"
 )
 
-# Resume Skills
+# Extract Resume Skills
 resume_skills = extract_skills(
     resume_text
 )
 
-# Clear Jobs
+# Clear Old Jobs
 clear_jobs()
 
 # Collect Jobs
@@ -69,6 +89,8 @@ print(
 )
 
 generated = 0
+
+high_match_jobs = []
 
 print(
     "\n===== PROCESSING JOBS =====\n"
@@ -160,6 +182,22 @@ for job in jobs:
             job["job_title"]
         )
 
+        high_match_jobs.append({
+
+            "job_title":
+            job["job_title"],
+
+            "company":
+            job["company"],
+
+            "score":
+            score,
+
+            "apply_url":
+            job["apply_url"]
+
+        })
+
         generated += 1
 
 print(
@@ -169,3 +207,22 @@ print(
 view_jobs()
 
 export_jobs_to_excel()
+
+try:
+
+    send_summary_email(
+
+        EMAIL_SENDER,
+
+        EMAIL_PASSWORD,
+
+        EMAIL_RECEIVER,
+
+        high_match_jobs
+    )
+
+except Exception as e:
+
+    print(
+        f"Summary Email Failed: {e}"
+    )
