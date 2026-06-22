@@ -29,7 +29,8 @@ jobs = pd.read_sql_query(
         job_title,
         company,
         location,
-        match_score
+        match_score,
+        apply_url
     FROM jobs
     """,
     conn
@@ -89,28 +90,19 @@ total = len(applications)
 
 col1, col2, col3, col4, col5 = st.columns(5)
 
-with col1:
-    st.metric("New", new_count)
-
-with col2:
-    st.metric("Applied", applied)
-
-with col3:
-    st.metric("Interview", interview)
-
-with col4:
-    st.metric("Rejected", rejected)
-
-with col5:
-    st.metric("Offer", offer)
+col1.metric("New", new_count)
+col2.metric("Applied", applied)
+col3.metric("Interview", interview)
+col4.metric("Rejected", rejected)
+col5.metric("Offer", offer)
 
 st.divider()
 
 # =====================================
-# SUCCESS RATES
+# SUCCESS METRICS
 # =====================================
 
-st.header("🎯 Application Success Metrics")
+st.header("🎯 Success Metrics")
 
 interview_rate = 0
 offer_rate = 0
@@ -129,17 +121,15 @@ if total > 0:
 
 c1, c2 = st.columns(2)
 
-with c1:
-    st.metric(
-        "Interview Rate",
-        f"{interview_rate}%"
-    )
+c1.metric(
+    "Interview Rate",
+    f"{interview_rate}%"
+)
 
-with c2:
-    st.metric(
-        "Offer Rate",
-        f"{offer_rate}%"
-    )
+c2.metric(
+    "Offer Rate",
+    f"{offer_rate}%"
+)
 
 status_counts = (
     applications["status"]
@@ -167,6 +157,66 @@ st.plotly_chart(
 st.divider()
 
 # =====================================
+# JOB FILTERS
+# =====================================
+
+st.header("🔍 Job Search Filters")
+
+search_company = st.text_input(
+    "Search Company"
+)
+
+search_job = st.text_input(
+    "Search Job Title"
+)
+
+min_score = st.slider(
+    "Minimum Match Score",
+    0,
+    100,
+    50
+)
+
+filtered_jobs = jobs.copy()
+
+if search_company:
+
+    filtered_jobs = filtered_jobs[
+        filtered_jobs["company"]
+        .str.contains(
+            search_company,
+            case=False,
+            na=False
+        )
+    ]
+
+if search_job:
+
+    filtered_jobs = filtered_jobs[
+        filtered_jobs["job_title"]
+        .str.contains(
+            search_job,
+            case=False,
+            na=False
+        )
+    ]
+
+filtered_jobs = filtered_jobs[
+    filtered_jobs["match_score"] >= min_score
+]
+
+st.download_button(
+    "📥 Download Filtered Jobs CSV",
+    filtered_jobs.to_csv(
+        index=False
+    ),
+    file_name="filtered_jobs.csv",
+    mime="text/csv"
+)
+
+st.divider()
+
+# =====================================
 # JOB STATISTICS
 # =====================================
 
@@ -187,46 +237,77 @@ average_score = round(
     2
 )
 
-with col1:
-    st.metric(
-        "Total Jobs",
-        total_jobs
-    )
+col1.metric(
+    "Total Jobs",
+    total_jobs
+)
 
-with col2:
-    st.metric(
-        "Jobs Above 60%",
-        high_match_jobs
-    )
+col2.metric(
+    "Jobs Above 60%",
+    high_match_jobs
+)
 
-with col3:
-    st.metric(
-        "Average Match Score",
-        f"{average_score}%"
-    )
+col3.metric(
+    "Average Match Score",
+    f"{average_score}%"
+)
 
 st.divider()
 
-st.header("🔥 Top Matching Jobs")
+# =====================================
+# TOP JOBS
+# =====================================
+
+st.header("🔥 Matching Jobs")
+
+display_jobs = filtered_jobs.sort_values(
+    by="match_score",
+    ascending=False
+)
 
 st.dataframe(
-    jobs.sort_values(
-        by="match_score",
-        ascending=False
-    ).head(20),
+    display_jobs,
     use_container_width=True
 )
 
 st.divider()
+
+# =====================================
+# APPLY LINKS
+# =====================================
+
+st.header("🚀 Apply Now")
+
+for _, row in display_jobs.head(20).iterrows():
+
+    st.markdown(
+        f"""
+### {row['job_title']}
+**Company:** {row['company']}  
+**Match Score:** {row['match_score']:.2f}%  
+
+[Apply Now]({row['apply_url']})
+"""
+    )
+
+st.divider()
+
+# =====================================
+# JOB HISTORY ANALYTICS
+# =====================================
 
 st.header("📈 Job History Analytics")
 
 if not history.empty:
 
     daily_jobs = (
-        history.groupby("scan_date")
+        history.groupby(
+            "scan_date"
+        )
         .size()
-        .reset_index(name="jobs_found")
+        .reset_index(
+            name="jobs_found"
+        )
     )
 
     fig_daily = px.line(
@@ -238,6 +319,26 @@ if not history.empty:
 
     st.plotly_chart(
         fig_daily,
+        use_container_width=True
+    )
+
+    avg_scores = (
+        history.groupby(
+            "scan_date"
+        )["match_score"]
+        .mean()
+        .reset_index()
+    )
+
+    fig_avg = px.line(
+        avg_scores,
+        x="scan_date",
+        y="match_score",
+        title="Average Match Score Trend"
+    )
+
+    st.plotly_chart(
+        fig_avg,
         use_container_width=True
     )
 
@@ -255,58 +356,51 @@ for index, row in applications.iterrows():
         [4, 2, 1]
     )
 
-    with col1:
+    col1.write(
+        f"{row['company']} | {row['job_title']}"
+    )
 
-        st.write(
-            f"{row['company']} | "
-            f"{row['job_title']}"
+    statuses = [
+        "New",
+        "Applied",
+        "Interview",
+        "Rejected",
+        "Offer"
+    ]
+
+    current_index = statuses.index(
+        row["status"]
+    )
+
+    new_status = col2.selectbox(
+        "Status",
+        statuses,
+        index=current_index,
+        key=f"status_{index}"
+    )
+
+    if col3.button(
+        "Update",
+        key=f"btn_{index}"
+    ):
+
+        update_status(
+            row["company"],
+            row["job_title"],
+            new_status
         )
 
-    with col2:
-
-        new_status = st.selectbox(
-
-            "Status",
-
-            [
-                "New",
-                "Applied",
-                "Interview",
-                "Rejected",
-                "Offer"
-            ],
-
-            index=[
-                "New",
-                "Applied",
-                "Interview",
-                "Rejected",
-                "Offer"
-            ].index(row["status"]),
-
-            key=f"status_{index}"
+        st.success(
+            "Status Updated"
         )
 
-    with col3:
-
-        if st.button(
-            "Update",
-            key=f"btn_{index}"
-        ):
-
-            update_status(
-                row["company"],
-                row["job_title"],
-                new_status
-            )
-
-            st.success(
-                "Updated"
-            )
-
-            st.rerun()
+        st.rerun()
 
 st.divider()
+
+# =====================================
+# APPLICATION TABLE
+# =====================================
 
 st.header("📝 Applications")
 
