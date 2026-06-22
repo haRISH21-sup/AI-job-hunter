@@ -1,4 +1,9 @@
-from scripts.database import get_connection, initialize_database
+from scripts.database import (
+    get_connection,
+    initialize_database
+)
+
+from datetime import datetime
 
 
 def save_job(
@@ -35,6 +40,26 @@ def save_job(
         apply_url
     ))
 
+    cursor.execute("""
+    INSERT INTO job_history
+    (
+        scan_date,
+        job_title,
+        company,
+        location,
+        match_score
+    )
+    VALUES (?, ?, ?, ?, ?)
+    """, (
+        datetime.now().strftime(
+            "%Y-%m-%d"
+        ),
+        job_title,
+        company,
+        location,
+        float(match_score)
+    ))
+
     conn.commit()
     conn.close()
 
@@ -47,7 +72,9 @@ def clear_jobs():
 
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM jobs")
+    cursor.execute(
+        "DELETE FROM jobs"
+    )
 
     conn.commit()
 
@@ -78,7 +105,9 @@ def view_jobs():
 
     conn.close()
 
-    print("\n===== TOP REAL JOB MATCHES =====\n")
+    print(
+        "\n===== TOP REAL JOB MATCHES =====\n"
+    )
 
     for row in rows:
 

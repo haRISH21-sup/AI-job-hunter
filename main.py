@@ -37,6 +37,9 @@ from scripts.application_package_generator import (
 from scripts.summary_email_notifier import (
     send_summary_email
 )
+from scripts.application_tracker import (
+    add_application
+)
 from scripts.job_cleaner import (
     remove_duplicate_jobs
 )
@@ -73,7 +76,7 @@ resume_skills = extract_skills(
     resume_text
 )
 
-# Clear Old Jobs
+# Clear Previous Scan Jobs
 clear_jobs()
 
 # Collect Jobs
@@ -180,6 +183,13 @@ for job in jobs:
         create_application_package(
             job["company"],
             job["job_title"]
+        )
+
+        # AUTO APPLICATION TRACKER
+        add_application(
+            job["company"],
+            job["job_title"],
+            "New"
         )
 
         high_match_jobs.append({

@@ -53,5 +53,22 @@ def initialize_database():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS job_history (
+
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        scan_date TEXT,
+
+        job_title TEXT,
+
+        company TEXT,
+
+        location TEXT,
+
+        match_score REAL
+    )
+    """)
+
     conn.commit()
     conn.close()

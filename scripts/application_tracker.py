@@ -1,15 +1,15 @@
-from datetime import date
-
 from scripts.database import (
     get_connection,
     initialize_database
 )
 
+from datetime import datetime
+
 
 def add_application(
         company,
         job_title,
-        status="Applied",
+        status="New",
         notes=""
 ):
 
@@ -33,24 +33,44 @@ def add_application(
         """, (
             company,
             job_title,
-            str(date.today()),
+            datetime.now().strftime("%Y-%m-%d"),
             status,
             notes
         ))
 
-        print("Application Added Successfully")
+        conn.commit()
 
     except:
+        pass
 
-        print("Application Already Exists")
+    conn.close()
+
+
+def update_status(
+        company,
+        job_title,
+        status
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    UPDATE applications
+    SET status=?
+    WHERE company=?
+    AND job_title=?
+    """, (
+        status,
+        company,
+        job_title
+    ))
 
     conn.commit()
     conn.close()
 
 
 def view_applications():
-
-    initialize_database()
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -60,51 +80,13 @@ def view_applications():
         company,
         job_title,
         date_applied,
-        status,
-        notes
+        status
     FROM applications
-    ORDER BY date_applied DESC
     """)
 
     rows = cursor.fetchall()
 
     conn.close()
 
-    print("\n===== APPLICATIONS =====\n")
-
     for row in rows:
-
-        print(
-            f"Company: {row[0]}\n"
-            f"Job Title: {row[1]}\n"
-            f"Date Applied: {row[2]}\n"
-            f"Status: {row[3]}\n"
-            f"Notes: {row[4]}\n"
-            f"{'-'*40}"
-        )
-
-
-def update_status(
-        company,
-        job_title,
-        new_status
-):
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    UPDATE applications
-    SET status = ?
-    WHERE company = ?
-    AND job_title = ?
-    """, (
-        new_status,
-        company,
-        job_title
-    ))
-
-    conn.commit()
-    conn.close()
-
-    print("Status Updated")
+        print(row)
