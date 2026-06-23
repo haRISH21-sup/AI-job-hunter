@@ -19,6 +19,14 @@ from scripts.career_coach import (
     generate_career_advice
 )
 
+from scripts.resume_reader import (
+    read_resume
+)
+
+from scripts.skill_extractor import (
+    extract_skills
+)
+
 st.set_page_config(
     page_title="AI Job Hunter",
     layout="wide"
@@ -37,13 +45,14 @@ applications = pd.read_sql_query(
 
 jobs = pd.read_sql_query(
     """
-    SELECT
-        job_title,
-        company,
-        location,
-        match_score,
-        apply_url
-    FROM jobs
+   SELECT
+    job_title,
+    company,
+    location,
+    description,
+    match_score,
+    apply_url
+   FROM jobs
     """,
     conn
 )
@@ -764,16 +773,17 @@ st.header("🎯 AI Career Coach")
 
 try:
 
-    resume_skills = [
+    # Read Resume
+    resume_text = read_resume(
+        "resumes/Resume.pdf"
+    )
 
-        "Networking",
-        "TCP/IP",
-        "DNS",
-        "DHCP",
-        "Firewall",
-        "Python"
-    ]
+    # Extract Skills
+    resume_skills = extract_skills(
+        resume_text
+    )
 
+    # Prepare Job Records
     job_records = []
 
     for _, row in jobs.iterrows():
@@ -781,12 +791,16 @@ try:
         job_records.append({
 
             "description":
-            row.get(
-                "job_title",
-                ""
+            str(
+                row.get(
+                    "description",
+                    ""
+                )
             )
+
         })
 
+    # Generate Advice
     advice = (
         generate_career_advice(
             resume_skills,
@@ -796,19 +810,37 @@ try:
 
     col1, col2 = st.columns(2)
 
+    # =====================
+    # MISSING SKILLS
+    # =====================
+
     with col1:
 
         st.subheader(
             "📚 Top Missing Skills"
         )
 
-        for skill in advice[
+        if advice[
             "top_missing"
         ]:
 
-            st.write(
-                f"• {skill}"
+            for skill in advice[
+                "top_missing"
+            ]:
+
+                st.write(
+                    f"• {skill}"
+                )
+
+        else:
+
+            st.success(
+                "No major skill gaps detected."
             )
+
+    # =====================
+    # CERTIFICATIONS
+    # =====================
 
     with col2:
 
@@ -816,13 +848,27 @@ try:
             "🎓 Recommended Certifications"
         )
 
-        for cert in advice[
+        if advice[
             "certifications"
         ]:
 
-            st.write(
-                f"• {cert}"
+            for cert in advice[
+                "certifications"
+            ]:
+
+                st.write(
+                    f"• {cert}"
+                )
+
+        else:
+
+            st.success(
+                "Current certifications appear sufficient."
             )
+
+    # =====================
+    # CAREER ROADMAP
+    # =====================
 
     st.subheader(
         "🧭 Career Roadmap"
@@ -835,6 +881,34 @@ try:
         st.write(
             f"➡ {step}"
         )
+
+    # =====================
+    # CURRENT SKILLS
+    # =====================
+
+    st.subheader(
+        "🛠 Current Resume Skills"
+    )
+
+    skill_df = pd.DataFrame({
+
+        "Skills":
+        resume_skills
+
+    })
+
+    st.dataframe(
+        skill_df,
+        use_container_width=True
+    )
+
+    # =====================
+    # LEARNING PRIORITY
+    # =====================
+
+    st.subheader(
+        "📊 Learning Priority"
+    )
 
     score_df = pd.DataFrame({
 
@@ -851,6 +925,7 @@ try:
                 "learning_scores"
             ].values()
         )
+
     })
 
     fig_learning = px.bar(
