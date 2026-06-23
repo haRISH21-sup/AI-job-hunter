@@ -15,6 +15,10 @@ from scripts.watchlist import (
     add_company_to_watchlist
 )
 
+from scripts.career_coach import (
+    generate_career_advice
+)
+
 st.set_page_config(
     page_title="AI Job Hunter",
     layout="wide"
@@ -749,6 +753,123 @@ for index, row in applications.iterrows():
         )
 
         st.rerun()
+
+st.divider()
+
+# =====================================
+# AI CAREER COACH
+# =====================================
+
+st.header("🎯 AI Career Coach")
+
+try:
+
+    resume_skills = [
+
+        "Networking",
+        "TCP/IP",
+        "DNS",
+        "DHCP",
+        "Firewall",
+        "Python"
+    ]
+
+    job_records = []
+
+    for _, row in jobs.iterrows():
+
+        job_records.append({
+
+            "description":
+            row.get(
+                "job_title",
+                ""
+            )
+        })
+
+    advice = (
+        generate_career_advice(
+            resume_skills,
+            job_records
+        )
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.subheader(
+            "📚 Top Missing Skills"
+        )
+
+        for skill in advice[
+            "top_missing"
+        ]:
+
+            st.write(
+                f"• {skill}"
+            )
+
+    with col2:
+
+        st.subheader(
+            "🎓 Recommended Certifications"
+        )
+
+        for cert in advice[
+            "certifications"
+        ]:
+
+            st.write(
+                f"• {cert}"
+            )
+
+    st.subheader(
+        "🧭 Career Roadmap"
+    )
+
+    for step in advice[
+        "career_path"
+    ]:
+
+        st.write(
+            f"➡ {step}"
+        )
+
+    score_df = pd.DataFrame({
+
+        "Category":
+        list(
+            advice[
+                "learning_scores"
+            ].keys()
+        ),
+
+        "Score":
+        list(
+            advice[
+                "learning_scores"
+            ].values()
+        )
+    })
+
+    fig_learning = px.bar(
+        score_df,
+        x="Category",
+        y="Score",
+        title="Learning Priority"
+    )
+
+    st.plotly_chart(
+        fig_learning,
+        use_container_width=True
+    )
+
+except Exception as e:
+
+    st.warning(
+        f"Career Coach Error: {e}"
+    )
 
 st.divider()
 
