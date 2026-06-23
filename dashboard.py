@@ -407,10 +407,49 @@ st.divider()
 
 st.header("🔥 Matching Jobs")
 
-display_jobs = filtered_jobs.sort_values(
-    by="match_score",
-    ascending=False
-)
+if not watchlist.empty:
+
+    watchlist_companies = [
+
+        company.lower()
+
+        for company in
+        watchlist["company"]
+    ]
+
+    filtered_jobs["priority"] = (
+
+        filtered_jobs["company"]
+        .str.lower()
+        .isin(
+            watchlist_companies
+        )
+
+    )
+
+    display_jobs = (
+        filtered_jobs
+        .sort_values(
+            by=[
+                "priority",
+                "match_score"
+            ],
+            ascending=[
+                False,
+                False
+            ]
+        )
+    )
+
+else:
+
+    display_jobs = (
+        filtered_jobs
+        .sort_values(
+            by="match_score",
+            ascending=False
+        )
+    )
 
 st.dataframe(
     display_jobs,
@@ -497,6 +536,129 @@ if not watchlist.empty:
         watchlist,
         use_container_width=True
     )
+
+st.divider()
+
+# =====================================
+# WATCHLIST MATCHES TODAY
+# =====================================
+
+st.header("🚨 Watchlist Matches Today")
+
+if not watchlist.empty:
+
+    watchlist_companies = [
+
+        company.lower()
+
+        for company in
+        watchlist["company"]
+    ]
+
+    watchlist_jobs = jobs[
+
+        jobs["company"]
+        .str.lower()
+        .isin(
+            watchlist_companies
+        )
+
+    ]
+
+    if not watchlist_jobs.empty:
+
+        watchlist_jobs = (
+            watchlist_jobs
+            .sort_values(
+                by="match_score",
+                ascending=False
+            )
+        )
+
+        st.dataframe(
+            watchlist_jobs,
+            use_container_width=True
+        )
+
+        st.success(
+            f"{len(watchlist_jobs)} "
+            f"watchlist matches found."
+        )
+
+    else:
+
+        st.info(
+            "No watchlist matches "
+            "found today."
+        )
+
+else:
+
+    st.info(
+        "Add companies to "
+        "your watchlist first."
+    )
+
+st.divider()
+
+# =====================================
+# WATCHLIST ANALYTICS
+# =====================================
+
+st.header("📊 Watchlist Analytics")
+
+if not watchlist.empty:
+
+    watchlist_companies = [
+
+        company.lower()
+
+        for company in
+        watchlist["company"]
+    ]
+
+    watchlist_jobs = jobs[
+
+        jobs["company"]
+        .str.lower()
+        .isin(
+            watchlist_companies
+        )
+
+    ]
+
+    if not watchlist_jobs.empty:
+
+        company_counts = (
+
+            watchlist_jobs["company"]
+            .value_counts()
+            .reset_index()
+
+        )
+
+        company_counts.columns = [
+            "Company",
+            "Jobs Found"
+        ]
+
+        fig_watchlist = px.bar(
+            company_counts,
+            x="Company",
+            y="Jobs Found",
+            title="Watchlist Companies Found"
+        )
+
+        st.plotly_chart(
+            fig_watchlist,
+            use_container_width=True
+        )
+
+    else:
+
+        st.info(
+            "No watchlist company jobs found."
+        )
 
 st.divider()
 
