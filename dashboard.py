@@ -27,6 +27,35 @@ from scripts.skill_extractor import (
     extract_skills
 )
 
+from scripts.job_market_intelligence import (
+    analyze_market
+)
+
+from scripts.application_reminder import (
+    get_followup_jobs
+)
+
+from scripts.interview_readiness import (
+    calculate_interview_readiness
+)
+
+from scripts.salary_intelligence import (
+    get_salary_insights
+)
+
+from scripts.learning_planner import (
+    generate_learning_plan
+)
+
+from scripts.mock_interview import (
+    generate_mock_questions,
+    evaluate_answers
+)
+
+from scripts.executive_dashboard import (
+    generate_executive_summary
+)
+
 st.set_page_config(
     page_title="AI Job Hunter",
     layout="wide"
@@ -944,6 +973,900 @@ except Exception as e:
 
     st.warning(
         f"Career Coach Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# JOB MARKET INTELLIGENCE
+# =====================================
+
+st.header("📈 Job Market Intelligence")
+
+try:
+
+    market_skills = analyze_market(
+        jobs
+    )
+
+    if market_skills:
+
+        skill_df = pd.DataFrame({
+
+            "Skill":
+            list(
+                market_skills.keys()
+            ),
+
+            "Demand":
+            list(
+                market_skills.values()
+            )
+
+        })
+
+        st.subheader(
+            "🔥 Top Skills In Demand"
+        )
+
+        fig_skills = px.bar(
+            skill_df,
+            x="Skill",
+            y="Demand",
+            title="Top Skills In Market"
+        )
+
+        st.plotly_chart(
+            fig_skills,
+            use_container_width=True
+        )
+
+        st.dataframe(
+            skill_df,
+            use_container_width=True
+        )
+
+    else:
+
+        st.info(
+            "No market skill data available."
+        )
+
+except Exception as e:
+
+    st.warning(
+        f"Market Intelligence Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# TOP HIRING COMPANIES
+# =====================================
+
+st.header("🏢 Top Hiring Companies")
+
+try:
+
+    company_df = (
+
+        jobs["company"]
+        .value_counts()
+        .head(10)
+        .reset_index()
+
+    )
+
+    company_df.columns = [
+        "Company",
+        "Jobs"
+    ]
+
+    fig_company = px.bar(
+        company_df,
+        x="Company",
+        y="Jobs",
+        title="Top Hiring Companies"
+    )
+
+    st.plotly_chart(
+        fig_company,
+        use_container_width=True
+    )
+
+except Exception as e:
+
+    st.warning(
+        f"Company Analytics Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# TOP LOCATIONS
+# =====================================
+
+st.header("📍 Top Hiring Locations")
+
+try:
+
+    location_df = (
+
+        jobs["location"]
+        .value_counts()
+        .head(10)
+        .reset_index()
+
+    )
+
+    location_df.columns = [
+        "Location",
+        "Jobs"
+    ]
+
+    fig_location = px.bar(
+        location_df,
+        x="Location",
+        y="Jobs",
+        title="Top Hiring Locations"
+    )
+
+    st.plotly_chart(
+        fig_location,
+        use_container_width=True
+    )
+
+except Exception as e:
+
+    st.warning(
+        f"Location Analytics Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# APPLICATION REMINDERS
+# =====================================
+
+st.header("🔔 Follow-Up Reminders")
+
+try:
+
+    reminders = get_followup_jobs(
+        applications
+    )
+
+    if reminders:
+
+        reminder_df = pd.DataFrame(
+            reminders
+        )
+
+        st.warning(
+            f"{len(reminders)} applications "
+            f"need follow-up."
+        )
+
+        st.dataframe(
+            reminder_df,
+            use_container_width=True
+        )
+
+        for reminder in reminders:
+
+            st.info(
+
+                f"Follow up with "
+                f"{reminder['company']} "
+
+                f"for "
+
+                f"{reminder['job_title']} "
+
+                f"({reminder['days']} days ago)"
+
+            )
+
+    else:
+
+        st.success(
+            "No follow-ups required."
+        )
+
+except Exception as e:
+
+    st.warning(
+        f"Reminder Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# INTERVIEW READINESS SCORE
+# =====================================
+
+st.header("🎤 Interview Readiness Score")
+
+try:
+
+    resume_text = read_resume(
+        "resumes/Resume.pdf"
+    )
+
+    resume_skills = extract_skills(
+        resume_text
+    )
+
+    readiness = (
+        calculate_interview_readiness(
+            resume_skills
+        )
+    )
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric(
+        "Overall",
+        f"{readiness['overall']}%"
+    )
+
+    col2.metric(
+        "Networking",
+        f"{readiness['networking']}%"
+    )
+
+    col3.metric(
+        "Security",
+        f"{readiness['security']}%"
+    )
+
+    col4.metric(
+        "Automation",
+        f"{readiness['automation']}%"
+    )
+
+    col5.metric(
+        "Cloud",
+        f"{readiness['cloud']}%"
+    )
+
+    score_df = pd.DataFrame({
+
+        "Category": [
+
+            "Networking",
+            "Security",
+            "Automation",
+            "Cloud"
+
+        ],
+
+        "Score": [
+
+            readiness[
+                "networking"
+            ],
+
+            readiness[
+                "security"
+            ],
+
+            readiness[
+                "automation"
+            ],
+
+            readiness[
+                "cloud"
+            ]
+        ]
+    })
+
+    fig_readiness = px.bar(
+        score_df,
+        x="Category",
+        y="Score",
+        title="Interview Readiness Breakdown"
+    )
+
+    st.plotly_chart(
+        fig_readiness,
+        use_container_width=True
+    )
+
+    st.subheader(
+        "📌 Recommendation"
+    )
+
+    if readiness["overall"] >= 80:
+
+        st.success(
+            "Interview Ready. Focus on mock interviews and advanced topics."
+        )
+
+    elif readiness["overall"] >= 60:
+
+        st.warning(
+            "Good foundation. Improve missing technical skills before interviews."
+        )
+
+    else:
+
+        st.error(
+            "Significant skill gaps detected. Focus on learning and certifications."
+        )
+
+except Exception as e:
+
+    st.warning(
+        f"Interview Readiness Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# SALARY INTELLIGENCE
+# =====================================
+
+st.header("💰 Salary Intelligence")
+
+try:
+
+    resume_text = read_resume(
+        "resumes/Resume.pdf"
+    )
+
+    resume_skills = extract_skills(
+        resume_text
+    )
+
+    readiness = (
+        calculate_interview_readiness(
+            resume_skills
+        )
+    )
+
+    salary_info = (
+        get_salary_insights(
+            readiness[
+                "overall"
+            ]
+        )
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        st.metric(
+            "Current Role",
+            salary_info[
+                "current_role"
+            ]
+        )
+
+    with col2:
+
+        st.metric(
+            "Recommended Role",
+            salary_info[
+                "recommended_role"
+            ]
+        )
+
+    with col3:
+
+        st.metric(
+            "Expected Salary",
+            salary_info[
+                "salary_range"
+            ]
+        )
+
+    st.subheader(
+        "📈 Career Growth Roadmap"
+    )
+
+    roadmap_df = pd.DataFrame({
+
+        "Career Stage": [
+
+            salary_info[
+                "current_role"
+            ],
+
+            salary_info[
+                "recommended_role"
+            ],
+
+            salary_info[
+                "next_role"
+            ]
+
+        ],
+
+        "Salary": [
+
+            5,
+
+            10,
+
+            18
+
+        ]
+
+    })
+
+    fig_salary = px.line(
+        roadmap_df,
+        x="Career Stage",
+        y="Salary",
+        markers=True,
+        title="Salary Growth Roadmap (LPA)"
+    )
+
+    st.plotly_chart(
+        fig_salary,
+        use_container_width=True
+    )
+
+    st.subheader(
+        "🎯 Career Recommendation"
+    )
+
+    st.info(
+
+        f"Based on your interview readiness score of "
+
+        f"{readiness['overall']}%, "
+
+        f"your next target role should be "
+
+        f"{salary_info['recommended_role']} "
+
+        f"with an expected salary range of "
+
+        f"{salary_info['salary_range']}."
+
+    )
+
+    st.subheader(
+        "🚀 Next Career Step"
+    )
+
+    st.success(
+
+        f"Target Role: "
+        f"{salary_info['next_role']} | "
+
+        f"Expected Salary: "
+        f"{salary_info['next_salary']}"
+
+    )
+
+except Exception as e:
+
+    st.warning(
+        f"Salary Intelligence Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# AUTO LEARNING PLANNER
+# =====================================
+
+st.header("📚 Auto Learning Planner")
+
+try:
+
+    resume_text = read_resume(
+        "resumes/Resume.pdf"
+    )
+
+    resume_skills = extract_skills(
+        resume_text
+    )
+
+    job_records = []
+
+    for _, row in jobs.iterrows():
+
+        job_records.append({
+
+            "description":
+            str(
+                row.get(
+                    "description",
+                    ""
+                )
+            )
+
+        })
+
+    advice = generate_career_advice(
+        resume_skills,
+        job_records
+    )
+
+    learning_plan = (
+        generate_learning_plan(
+            advice[
+                "top_missing"
+            ]
+        )
+    )
+
+    st.subheader(
+        "🎯 Personalized Learning Roadmap"
+    )
+
+    for item in learning_plan:
+
+        st.success(
+            item
+        )
+
+    plan_df = pd.DataFrame({
+
+        "Learning Plan":
+        learning_plan
+
+    })
+
+    st.dataframe(
+        plan_df,
+        use_container_width=True
+    )
+
+except Exception as e:
+
+    st.warning(
+        f"Learning Planner Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# AI MOCK INTERVIEW
+# =====================================
+
+st.header("🎤 AI Mock Interview")
+
+try:
+
+    if "mock_questions" not in st.session_state:
+
+        st.session_state.mock_questions = []
+
+    if st.button(
+        "Generate Mock Interview"
+    ):
+
+        st.session_state.mock_questions = (
+            generate_mock_questions()
+        )
+
+    if st.session_state.mock_questions:
+
+        answers = []
+
+        st.subheader(
+            "Interview Questions"
+        )
+
+        for i, question in enumerate(
+            st.session_state.mock_questions
+        ):
+
+            st.write(
+                f"Q{i+1}. {question}"
+            )
+
+            answer = st.text_area(
+                f"Answer {i+1}",
+                key=f"answer_{i}"
+            )
+
+            answers.append(
+                answer
+            )
+
+        if st.button(
+            "Evaluate Interview"
+        ):
+
+            result = (
+                evaluate_answers(
+                    answers
+                )
+            )
+
+            st.metric(
+                "Interview Score",
+                f"{result['score']}%"
+            )
+
+            if result["score"] >= 80:
+
+                st.success(
+                    "Excellent Interview Performance"
+                )
+
+            elif result["score"] >= 60:
+
+                st.warning(
+                    "Good Performance - Improve Some Areas"
+                )
+
+            else:
+
+                st.error(
+                    "Needs Improvement"
+                )
+
+            st.subheader(
+                "Feedback"
+            )
+
+            if result[
+                "feedback"
+            ]:
+
+                for item in result[
+                    "feedback"
+                ]:
+
+                    st.write(
+                        f"• {item}"
+                    )
+
+            else:
+
+                st.success(
+                    "All answers look detailed."
+                )
+
+except Exception as e:
+
+    st.warning(
+        f"Mock Interview Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# EXECUTIVE DASHBOARD
+# =====================================
+
+st.header("📊 Executive Dashboard")
+
+try:
+
+    # Resume Skills
+    resume_text = read_resume(
+        "resumes/Resume.pdf"
+    )
+
+    resume_skills = extract_skills(
+        resume_text
+    )
+
+    # Career Coach
+    job_records = []
+
+    for _, row in jobs.iterrows():
+
+        job_records.append({
+
+            "description":
+            str(
+                row.get(
+                    "description",
+                    ""
+                )
+            )
+
+        })
+
+    advice = generate_career_advice(
+        resume_skills,
+        job_records
+    )
+
+    # Interview Readiness
+    readiness = (
+        calculate_interview_readiness(
+            resume_skills
+        )
+    )
+
+    # Salary Intelligence
+    salary_info = (
+        get_salary_insights(
+            readiness["overall"]
+        )
+    )
+
+    # KPI Metrics
+    total_jobs = len(jobs)
+
+    applications_count = len(
+        applications
+    )
+
+    interviews = len(
+
+        applications[
+            applications["status"]
+            == "Interview"
+        ]
+
+    )
+
+    offers = len(
+
+        applications[
+            applications["status"]
+            == "Offer"
+        ]
+
+    )
+
+    high_match_jobs = len(
+
+        jobs[
+            jobs["match_score"] >= 60
+        ]
+
+    )
+
+    success_rate = 0
+
+    if applications_count > 0:
+
+        success_rate = round(
+
+            (
+                interviews
+                +
+                offers
+            )
+            /
+            applications_count
+            * 100,
+
+            2
+
+        )
+
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+
+    col1.metric(
+        "Jobs",
+        total_jobs
+    )
+
+    col2.metric(
+        "High Match",
+        high_match_jobs
+    )
+
+    col3.metric(
+        "Applications",
+        applications_count
+    )
+
+    col4.metric(
+        "Interviews",
+        interviews
+    )
+
+    col5.metric(
+        "Offers",
+        offers
+    )
+
+    col6.metric(
+        "Success %",
+        f"{success_rate}%"
+    )
+
+    st.divider()
+
+    # Career Score
+
+    career_score = round(
+
+        (
+            readiness["overall"]
+            +
+            success_rate
+        ) / 2,
+
+        2
+
+    )
+
+    st.metric(
+        "🎯 Career Score",
+        f"{career_score}%"
+    )
+
+    st.divider()
+
+    # Executive Summary
+
+    summary = (
+        generate_executive_summary(
+
+            readiness["overall"],
+
+            salary_info,
+
+            advice["top_missing"]
+
+        )
+    )
+
+    st.subheader(
+        "📋 Executive Summary"
+    )
+
+    st.info(
+        summary
+    )
+
+    # Health Score
+
+    health_df = pd.DataFrame({
+
+        "Category": [
+
+            "Interview Readiness",
+
+            "Career Score",
+
+            "Market Alignment",
+
+            "Learning Progress"
+
+        ],
+
+        "Score": [
+
+            readiness["overall"],
+
+            career_score,
+
+            80,
+
+            75
+
+        ]
+
+    })
+
+    fig_health = px.bar(
+
+        health_df,
+
+        x="Category",
+
+        y="Score",
+
+        title="Career Health Dashboard"
+
+    )
+
+    st.plotly_chart(
+        fig_health,
+        use_container_width=True
+    )
+
+except Exception as e:
+
+    st.warning(
+        f"Executive Dashboard Error: {e}"
     )
 
 st.divider()
