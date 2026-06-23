@@ -123,6 +123,127 @@ col5.metric("Offer", offer)
 st.divider()
 
 # =====================================
+# RESUME PERFORMANCE ANALYTICS
+# =====================================
+
+st.header("📊 Resume Performance Analytics")
+
+interview_rate = (
+    round((interview / total) * 100, 2)
+    if total > 0 else 0
+)
+
+offer_rate = (
+    round((offer / total) * 100, 2)
+    if total > 0 else 0
+)
+
+rejection_rate = (
+    round((rejected / total) * 100, 2)
+    if total > 0 else 0
+)
+
+success_rate = offer_rate
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "Interview Rate",
+    f"{interview_rate}%"
+)
+
+col2.metric(
+    "Offer Rate",
+    f"{offer_rate}%"
+)
+
+col3.metric(
+    "Rejection Rate",
+    f"{rejection_rate}%"
+)
+
+col4.metric(
+    "Success Rate",
+    f"{success_rate}%"
+)
+
+st.divider()
+
+# =====================================
+# APPLICATION FUNNEL
+# =====================================
+
+st.header("📈 Application Funnel")
+
+funnel_df = pd.DataFrame({
+
+    "Stage": [
+        "Applications",
+        "Interviews",
+        "Offers"
+    ],
+
+    "Count": [
+        total,
+        interview,
+        offer
+    ]
+})
+
+fig_funnel = px.funnel(
+    funnel_df,
+    x="Count",
+    y="Stage",
+    title="Application Funnel"
+)
+
+st.plotly_chart(
+    fig_funnel,
+    use_container_width=True
+)
+
+st.divider()
+
+# =====================================
+# APPLICATION PIPELINE
+# =====================================
+
+st.header("📊 Application Pipeline")
+
+pipeline_df = pd.DataFrame({
+
+    "Status": [
+        "New",
+        "Applied",
+        "Interview",
+        "Rejected",
+        "Offer"
+    ],
+
+    "Count": [
+        new_count,
+        applied,
+        interview,
+        rejected,
+        offer
+    ]
+})
+
+fig_pipeline = px.bar(
+    pipeline_df,
+    x="Status",
+    y="Count",
+    title="Application Pipeline"
+)
+
+st.plotly_chart(
+    fig_pipeline,
+    use_container_width=True
+)
+
+st.divider()
+
+# =====================================
 # SUCCESS METRICS
 # =====================================
 
