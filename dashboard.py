@@ -244,66 +244,6 @@ st.plotly_chart(
 st.divider()
 
 # =====================================
-# SUCCESS METRICS
-# =====================================
-
-st.header("🎯 Success Metrics")
-
-interview_rate = 0
-offer_rate = 0
-
-if total > 0:
-
-    interview_rate = round(
-        (interview / total) * 100,
-        2
-    )
-
-    offer_rate = round(
-        (offer / total) * 100,
-        2
-    )
-
-c1, c2 = st.columns(2)
-
-c1.metric(
-    "Interview Rate",
-    f"{interview_rate}%"
-)
-
-c2.metric(
-    "Offer Rate",
-    f"{offer_rate}%"
-)
-
-if not applications.empty:
-
-    status_counts = (
-        applications["status"]
-        .value_counts()
-        .reset_index()
-    )
-
-    status_counts.columns = [
-        "Status",
-        "Count"
-    ]
-
-    fig_status = px.pie(
-        status_counts,
-        names="Status",
-        values="Count",
-        title="Application Status Distribution"
-    )
-
-    st.plotly_chart(
-        fig_status,
-        use_container_width=True
-    )
-
-st.divider()
-
-# =====================================
 # JOB FILTERS
 # =====================================
 
