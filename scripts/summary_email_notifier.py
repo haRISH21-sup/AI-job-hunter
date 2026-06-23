@@ -1,5 +1,6 @@
 import smtplib
 import sqlite3
+import os
 from email.message import EmailMessage
 
 
@@ -38,7 +39,8 @@ def send_summary_email(
         sender_email,
         app_password,
         receiver_email,
-        jobs
+        jobs,
+        pdf_report=None
 ):
 
     if not jobs:
@@ -147,9 +149,7 @@ def send_summary_email(
     msg = EmailMessage()
 
     msg["Subject"] = (
-
         f"AI Job Hunter Daily Summary "
-
         f"({len(jobs)} Jobs)"
     )
 
@@ -160,6 +160,27 @@ def send_summary_email(
     msg.set_content(
         body
     )
+
+    # Attach PDF report if available
+    if (
+        pdf_report
+        and
+        os.path.exists(
+            pdf_report
+        )
+    ):
+
+        with open(
+            pdf_report,
+            "rb"
+        ) as pdf:
+
+            msg.add_attachment(
+                pdf.read(),
+                maintype="application",
+                subtype="pdf",
+                filename="weekly_report.pdf"
+            )
 
     with smtplib.SMTP_SSL(
         "smtp.gmail.com",

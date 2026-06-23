@@ -51,6 +51,9 @@ from scripts.job_database import (
 from scripts.export_jobs import (
     export_jobs_to_excel
 )
+from scripts.pdf_report_generator import (
+    generate_weekly_report
+)
 
 load_dotenv()
 
@@ -217,20 +220,24 @@ print(
 view_jobs()
 
 export_jobs_to_excel()
+pdf_report = (
+    generate_weekly_report()
+)
 
 try:
 
     send_summary_email(
 
-        EMAIL_SENDER,
+    EMAIL_SENDER,
 
-        EMAIL_PASSWORD,
+    EMAIL_PASSWORD,
 
-        EMAIL_RECEIVER,
+    EMAIL_RECEIVER,
 
-        high_match_jobs
-    )
+    high_match_jobs,
 
+    pdf_report
+)
 except Exception as e:
 
     print(
