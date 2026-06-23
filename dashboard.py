@@ -7,6 +7,14 @@ from scripts.application_tracker import (
     update_status
 )
 
+from scripts.saved_jobs import (
+    save_job_to_watchlist
+)
+
+from scripts.watchlist import (
+    add_company_to_watchlist
+)
+
 st.set_page_config(
     page_title="AI Job Hunter",
     layout="wide"
@@ -44,6 +52,22 @@ history = pd.read_sql_query(
         job_title,
         match_score
     FROM job_history
+    """,
+    conn
+)
+
+saved_jobs = pd.read_sql_query(
+    """
+    SELECT *
+    FROM saved_jobs
+    """,
+    conn
+)
+
+watchlist = pd.read_sql_query(
+    """
+    SELECT *
+    FROM watchlist
     """,
     conn
 )
@@ -131,28 +155,30 @@ c2.metric(
     f"{offer_rate}%"
 )
 
-status_counts = (
-    applications["status"]
-    .value_counts()
-    .reset_index()
-)
+if not applications.empty:
 
-status_counts.columns = [
-    "Status",
-    "Count"
-]
+    status_counts = (
+        applications["status"]
+        .value_counts()
+        .reset_index()
+    )
 
-fig_status = px.pie(
-    status_counts,
-    names="Status",
-    values="Count",
-    title="Application Status Distribution"
-)
+    status_counts.columns = [
+        "Status",
+        "Count"
+    ]
 
-st.plotly_chart(
-    fig_status,
-    use_container_width=True
-)
+    fig_status = px.pie(
+        status_counts,
+        names="Status",
+        values="Count",
+        title="Application Status Distribution"
+    )
+
+    st.plotly_chart(
+        fig_status,
+        use_container_width=True
+    )
 
 st.divider()
 
@@ -235,7 +261,7 @@ high_match_jobs = len(
 average_score = round(
     jobs["match_score"].mean(),
     2
-)
+) if not jobs.empty else 0
 
 col1.metric(
     "Total Jobs",
@@ -255,7 +281,7 @@ col3.metric(
 st.divider()
 
 # =====================================
-# TOP JOBS
+# MATCHING JOBS
 # =====================================
 
 st.header("🔥 Matching Jobs")
@@ -273,21 +299,126 @@ st.dataframe(
 st.divider()
 
 # =====================================
-# APPLY LINKS
+# APPLY + SAVE JOBS
 # =====================================
 
-st.header("🚀 Apply Now")
+st.header("🚀 Apply & Save Jobs")
 
-for _, row in display_jobs.head(20).iterrows():
+for index, row in display_jobs.head(20).iterrows():
 
-    st.markdown(
-        f"""
+    col1, col2 = st.columns([5, 1])
+
+    with col1:
+
+        st.markdown(
+            f"""
 ### {row['job_title']}
 **Company:** {row['company']}  
+**Location:** {row['location']}  
 **Match Score:** {row['match_score']:.2f}%  
 
 [Apply Now]({row['apply_url']})
 """
+        )
+
+    with col2:
+
+        if st.button(
+            "⭐ Save",
+            key=f"save_{index}"
+        ):
+
+            save_job_to_watchlist(
+                row["job_title"],
+                row["company"],
+                row["location"],
+                row["match_score"],
+                row["apply_url"]
+            )
+
+            st.success(
+                "Job Saved"
+            )
+
+            st.rerun()
+
+st.divider()
+
+# =====================================
+# WATCHLIST
+# =====================================
+
+st.header("⭐ Company Watchlist")
+
+company_name = st.text_input(
+    "Company Name"
+)
+
+if st.button(
+    "Add To Watchlist"
+):
+
+    if company_name:
+
+        add_company_to_watchlist(
+            company_name
+        )
+
+        st.success(
+            "Company Added"
+        )
+
+        st.rerun()
+
+if not watchlist.empty:
+
+    st.dataframe(
+        watchlist,
+        use_container_width=True
+    )
+
+st.divider()
+
+# =====================================
+# SAVED JOBS
+# =====================================
+
+st.header("⭐ Saved Jobs")
+
+if not saved_jobs.empty:
+
+    st.dataframe(
+        saved_jobs,
+        use_container_width=True
+    )
+
+    company_stats = (
+        saved_jobs["company"]
+        .value_counts()
+        .reset_index()
+    )
+
+    company_stats.columns = [
+        "Company",
+        "Saved Jobs"
+    ]
+
+    fig_saved = px.bar(
+        company_stats,
+        x="Company",
+        y="Saved Jobs",
+        title="Most Saved Companies"
+    )
+
+    st.plotly_chart(
+        fig_saved,
+        use_container_width=True
+    )
+
+else:
+
+    st.info(
+        "No saved jobs yet."
     )
 
 st.divider()
