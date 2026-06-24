@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import plotly.express as px
+import os
 
 from scripts.application_tracker import (
     update_status,
@@ -77,36 +78,52 @@ from scripts.auth import (
     login_user
 )
 
+from scripts.rescore_jobs import (
+    rescore_jobs_for_resume
+)
+
 st.set_page_config(
     page_title="AI Job Hunter",
     layout="wide"
 )
 
 # =====================================
-# AUTHENTICATION
+# SESSION STATE INIT
 # =====================================
 
 if "logged_in" not in st.session_state:
-
     st.session_state.logged_in = False
 
 if "username" not in st.session_state:
-
     st.session_state.username = None
 
 if "user_id" not in st.session_state:
-
     st.session_state.user_id = None
 
+if "resume_path" not in st.session_state:
+    st.session_state.resume_path = None
+
+if "resume_filename" not in st.session_state:
+    st.session_state.resume_filename = None
+
+if "resume_text" not in st.session_state:
+    st.session_state.resume_text = None
+
+if "resume_skills" not in st.session_state:
+    st.session_state.resume_skills = []
+
+if "jobs_rescored" not in st.session_state:
+    st.session_state.jobs_rescored = False
+
+# =====================================
+# AUTHENTICATION
+# =====================================
 
 if not st.session_state.logged_in:
 
     st.title("🔐 AI Job Hunter Login")
 
-    tab1, tab2 = st.tabs([
-        "Login",
-        "Register"
-    ])
+    tab1, tab2 = st.tabs(["Login", "Register"])
 
     with tab1:
 
@@ -121,34 +138,18 @@ if not st.session_state.logged_in:
             key="login_pass"
         )
 
-        if st.button(
-            "Login"
-        ):
+        if st.button("Login"):
 
-            user = login_user(
-                username,
-                password
-            )
+            user = login_user(username, password)
 
             if user:
-
                 st.session_state.logged_in = True
-
                 st.session_state.user_id = user[0]
-
                 st.session_state.username = user[1]
-
-                st.success(
-                    "Login Successful"
-                )
-
+                st.success("Login Successful")
                 st.rerun()
-
             else:
-
-                st.error(
-                    "Invalid Username or Password"
-                )
+                st.error("Invalid Username or Password")
 
     with tab2:
 
@@ -163,9 +164,7 @@ if not st.session_state.logged_in:
             key="reg_pass"
         )
 
-        if st.button(
-            "Register"
-        ):
+        if st.button("Register"):
 
             success = register_user(
                 new_username,
@@ -173,50 +172,123 @@ if not st.session_state.logged_in:
             )
 
             if success:
-
-                st.success(
-                    "Registration Successful"
-                )
-
+                st.success("Registration Successful")
             else:
-
-                st.error(
-                    "Username Already Exists"
-                )
+                st.error("Username Already Exists")
 
     st.stop()
 
+# =====================================
+# SIDEBAR
+# =====================================
 
 st.sidebar.success(
     f"Logged in as: {st.session_state.username}"
 )
 
-CURRENT_USER_ID = (
-    st.session_state.user_id
-)
+CURRENT_USER_ID = st.session_state.user_id
 
-if st.sidebar.button(
-    "Logout"
-):
-
+if st.sidebar.button("Logout"):
     st.session_state.logged_in = False
-
     st.session_state.user_id = None
-
     st.session_state.username = None
-
+    st.session_state.resume_path = None
+    st.session_state.resume_filename = None
+    st.session_state.resume_text = None
+    st.session_state.resume_skills = []
+    st.session_state.jobs_rescored = False
     st.rerun()
 
 st.title("🚀 AI Job Hunter Dashboard")
 
-conn = sqlite3.connect(
-    "database/jobhunter.db"
+# =====================================
+# RESUME UPLOAD SECTION
+# =====================================
+
+st.header("📄 Upload Your Resume")
+
+uploaded_resume = st.file_uploader(
+    "Upload your resume (PDF)",
+    type=["pdf"],
+    help="Your resume will be used to personalize job matches AND all AI features."
 )
 
+if uploaded_resume is not None:
+
+    # Only process if it's a newly uploaded file (different name or not yet processed)
+    if uploaded_resume.name != st.session_state.resume_filename:
+
+        resume_dir = "resumes"
+        os.makedirs(resume_dir, exist_ok=True)
+
+        # Save per-user so multiple users don't overwrite each other
+        resume_filename = f"resume_{CURRENT_USER_ID}.pdf"
+        resume_path = os.path.join(resume_dir, resume_filename)
+
+        with open(resume_path, "wb") as f:
+            f.write(uploaded_resume.getbuffer())
+
+        # Read and store text + skills in session
+        resume_text = read_resume(resume_path)
+        resume_skills = extract_skills(resume_text)
+
+        st.session_state.resume_path = resume_path
+        st.session_state.resume_filename = uploaded_resume.name
+        st.session_state.resume_text = resume_text
+        st.session_state.resume_skills = resume_skills
+        st.session_state.jobs_rescored = False  # mark as needing rescore
+
+        # =====================================
+        # RESCORE ALL JOBS AGAINST THIS RESUME
+        # =====================================
+
+        with st.spinner(
+            "🔄 Personalizing job matches to your resume..."
+        ):
+            count = rescore_jobs_for_resume(resume_text)
+            st.session_state.jobs_rescored = True
+
+        st.success(
+            f"✅ Resume **{uploaded_resume.name}** uploaded! "
+            f"{count} jobs rescored to match your profile."
+        )
+
+        st.rerun()
+
+elif st.session_state.resume_path and os.path.exists(
+    st.session_state.resume_path
+):
+    st.info(
+        f"📎 Active resume: **{st.session_state.resume_filename}** "
+        f"— {len(st.session_state.resume_skills)} skills detected. "
+        f"Job matches are personalized to your resume."
+    )
+
+else:
+    st.warning(
+        "⚠️ No resume uploaded. Upload your PDF resume above. "
+        "Job matches will be generic until you upload."
+    )
+
+# Helper — returns resume text from session (never hits disk again)
+def get_resume_text():
+    return st.session_state.get("resume_text")
+
+def get_resume_skills():
+    return st.session_state.get("resume_skills", [])
+
+RESUME_AVAILABLE = bool(get_resume_text())
+
+st.divider()
+
+# =====================================
+# LOAD DATA FROM DATABASE
+# =====================================
+
+conn = sqlite3.connect("database/jobhunter.db")
+
 applications = pd.DataFrame(
-    get_applications(
-        CURRENT_USER_ID
-    ),
+    get_applications(CURRENT_USER_ID),
     columns=[
         "company",
         "job_title",
@@ -238,16 +310,39 @@ history = pd.read_sql_query(
     conn
 )
 
+# Jobs loaded from DB — match_score is now personalized
+# if user has uploaded a resume (rescore updated the DB)
+try:
+    jobs = pd.read_sql_query(
+        """
+        SELECT
+            job_title,
+            company,
+            location,
+            description,
+            match_score,
+            apply_url
+        FROM jobs
+        ORDER BY match_score DESC
+        """,
+        conn
+    )
+except Exception:
+    jobs = pd.DataFrame(
+        columns=[
+            "job_title",
+            "company",
+            "location",
+            "description",
+            "match_score",
+            "apply_url"
+        ]
+    )
+
 conn.close()
 
-# =====================================
-# UPDATE 1: Load saved jobs with user ID
-# =====================================
-
 saved_jobs = pd.DataFrame(
-    get_saved_jobs(
-        CURRENT_USER_ID
-    ),
+    get_saved_jobs(CURRENT_USER_ID),
     columns=[
         "Job Title",
         "Company",
@@ -258,27 +353,13 @@ saved_jobs = pd.DataFrame(
     ]
 )
 
-# =====================================
-# UPDATE 4: Load watchlist with user ID
-# =====================================
-
 watchlist = pd.DataFrame(
-    get_watchlist(
-        CURRENT_USER_ID
-    ),
-    columns=[
-        "Company"
-    ]
+    get_watchlist(CURRENT_USER_ID),
+    columns=["Company"]
 )
 
-# =====================================
-# UPDATE 1: Load recruiters with user ID
-# =====================================
-
 recruiters = pd.DataFrame(
-    get_recruiters(
-        CURRENT_USER_ID
-    ),
+    get_recruiters(CURRENT_USER_ID),
     columns=[
         "Recruiter",
         "Company",
@@ -297,33 +378,23 @@ recruiters = pd.DataFrame(
 st.header("📋 Application Statistics")
 
 new_count = len(
-    applications[
-        applications["status"] == "New"
-    ]
+    applications[applications["status"] == "New"]
 )
 
 applied = len(
-    applications[
-        applications["status"] == "Applied"
-    ]
+    applications[applications["status"] == "Applied"]
 )
 
 interview = len(
-    applications[
-        applications["status"] == "Interview"
-    ]
+    applications[applications["status"] == "Interview"]
 )
 
 rejected = len(
-    applications[
-        applications["status"] == "Rejected"
-    ]
+    applications[applications["status"] == "Rejected"]
 )
 
 offer = len(
-    applications[
-        applications["status"] == "Offer"
-    ]
+    applications[applications["status"] == "Offer"]
 )
 
 total = len(applications)
@@ -363,25 +434,10 @@ success_rate = offer_rate
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric(
-    "Interview Rate",
-    f"{interview_rate}%"
-)
-
-col2.metric(
-    "Offer Rate",
-    f"{offer_rate}%"
-)
-
-col3.metric(
-    "Rejection Rate",
-    f"{rejection_rate}%"
-)
-
-col4.metric(
-    "Success Rate",
-    f"{success_rate}%"
-)
+col1.metric("Interview Rate", f"{interview_rate}%")
+col2.metric("Offer Rate", f"{offer_rate}%")
+col3.metric("Rejection Rate", f"{rejection_rate}%")
+col4.metric("Success Rate", f"{success_rate}%")
 
 st.divider()
 
@@ -392,18 +448,8 @@ st.divider()
 st.header("📈 Application Funnel")
 
 funnel_df = pd.DataFrame({
-
-    "Stage": [
-        "Applications",
-        "Interviews",
-        "Offers"
-    ],
-
-    "Count": [
-        total,
-        interview,
-        offer
-    ]
+    "Stage": ["Applications", "Interviews", "Offers"],
+    "Count": [total, interview, offer]
 })
 
 fig_funnel = px.funnel(
@@ -413,10 +459,7 @@ fig_funnel = px.funnel(
     title="Application Funnel"
 )
 
-st.plotly_chart(
-    fig_funnel,
-    use_container_width=True
-)
+st.plotly_chart(fig_funnel, use_container_width=True)
 
 st.divider()
 
@@ -427,22 +470,8 @@ st.divider()
 st.header("📊 Application Pipeline")
 
 pipeline_df = pd.DataFrame({
-
-    "Status": [
-        "New",
-        "Applied",
-        "Interview",
-        "Rejected",
-        "Offer"
-    ],
-
-    "Count": [
-        new_count,
-        applied,
-        interview,
-        rejected,
-        offer
-    ]
+    "Status": ["New", "Applied", "Interview", "Rejected", "Offer"],
+    "Count": [new_count, applied, interview, rejected, offer]
 })
 
 fig_pipeline = px.bar(
@@ -452,10 +481,7 @@ fig_pipeline = px.bar(
     title="Application Pipeline"
 )
 
-st.plotly_chart(
-    fig_pipeline,
-    use_container_width=True
-)
+st.plotly_chart(fig_pipeline, use_container_width=True)
 
 st.divider()
 
@@ -465,13 +491,8 @@ st.divider()
 
 st.header("🔍 Job Search Filters")
 
-search_company = st.text_input(
-    "Search Company"
-)
-
-search_job = st.text_input(
-    "Search Job Title"
-)
+search_company = st.text_input("Search Company")
+search_job = st.text_input("Search Job Title")
 
 min_score = st.slider(
     "Minimum Match Score",
@@ -483,24 +504,16 @@ min_score = st.slider(
 filtered_jobs = jobs.copy()
 
 if search_company:
-
     filtered_jobs = filtered_jobs[
-        filtered_jobs["company"]
-        .str.contains(
-            search_company,
-            case=False,
-            na=False
+        filtered_jobs["company"].str.contains(
+            search_company, case=False, na=False
         )
     ]
 
 if search_job:
-
     filtered_jobs = filtered_jobs[
-        filtered_jobs["job_title"]
-        .str.contains(
-            search_job,
-            case=False,
-            na=False
+        filtered_jobs["job_title"].str.contains(
+            search_job, case=False, na=False
         )
     ]
 
@@ -510,9 +523,7 @@ filtered_jobs = filtered_jobs[
 
 st.download_button(
     "📥 Download Filtered Jobs CSV",
-    filtered_jobs.to_csv(
-        index=False
-    ),
+    filtered_jobs.to_csv(index=False),
     file_name="filtered_jobs.csv",
     mime="text/csv"
 )
@@ -525,35 +536,22 @@ st.divider()
 
 st.header("💼 Job Statistics")
 
-col1, col2, col3 = st.columns(3)
-
 total_jobs = len(jobs)
 
 high_match_jobs = len(
-    jobs[
-        jobs["match_score"] >= 60
-    ]
+    jobs[jobs["match_score"] >= 60]
 )
 
-average_score = round(
-    jobs["match_score"].mean(),
-    2
-) if not jobs.empty else 0
-
-col1.metric(
-    "Total Jobs",
-    total_jobs
+average_score = (
+    round(jobs["match_score"].mean(), 2)
+    if not jobs.empty else 0
 )
 
-col2.metric(
-    "Jobs Above 60%",
-    high_match_jobs
-)
+col1, col2, col3 = st.columns(3)
 
-col3.metric(
-    "Average Match Score",
-    f"{average_score}%"
-)
+col1.metric("Total Jobs", total_jobs)
+col2.metric("Jobs Above 60%", high_match_jobs)
+col3.metric("Average Match Score", f"{average_score}%")
 
 st.divider()
 
@@ -566,51 +564,28 @@ st.header("🔥 Matching Jobs")
 if not watchlist.empty:
 
     watchlist_companies = [
-
-        company.lower()
-
-        for company in
-        watchlist["Company"]
+        c.lower() for c in watchlist["Company"]
     ]
 
     filtered_jobs["priority"] = (
-
         filtered_jobs["company"]
         .str.lower()
-        .isin(
-            watchlist_companies
-        )
-
+        .isin(watchlist_companies)
     )
 
-    display_jobs = (
-        filtered_jobs
-        .sort_values(
-            by=[
-                "priority",
-                "match_score"
-            ],
-            ascending=[
-                False,
-                False
-            ]
-        )
+    display_jobs = filtered_jobs.sort_values(
+        by=["priority", "match_score"],
+        ascending=[False, False]
     )
 
 else:
 
-    display_jobs = (
-        filtered_jobs
-        .sort_values(
-            by="match_score",
-            ascending=False
-        )
+    display_jobs = filtered_jobs.sort_values(
+        by="match_score",
+        ascending=False
     )
 
-st.dataframe(
-    display_jobs,
-    use_container_width=True
-)
+st.dataframe(display_jobs, use_container_width=True)
 
 st.divider()
 
@@ -625,26 +600,19 @@ for index, row in display_jobs.head(20).iterrows():
     col1, col2 = st.columns([5, 1])
 
     with col1:
-
         st.markdown(
             f"""
 ### {row['job_title']}
-**Company:** {row['company']}  
-**Location:** {row['location']}  
-**Match Score:** {row['match_score']:.2f}%  
+**Company:** {row['company']}
+**Location:** {row['location']}
+**Match Score:** {row['match_score']:.2f}%
 
 [Apply Now]({row['apply_url']})
 """
         )
 
     with col2:
-
-        if st.button(
-            "⭐ Save",
-            key=f"save_{index}"
-        ):
-
-            # UPDATE 5: Pass CURRENT_USER_ID to save_job_to_watchlist
+        if st.button("⭐ Save", key=f"save_{index}"):
             save_job_to_watchlist(
                 CURRENT_USER_ID,
                 row["job_title"],
@@ -653,11 +621,7 @@ for index, row in display_jobs.head(20).iterrows():
                 row["match_score"],
                 row["apply_url"]
             )
-
-            st.success(
-                "Job Saved"
-            )
-
+            st.success("Job Saved")
             st.rerun()
 
 st.divider()
@@ -668,34 +632,19 @@ st.divider()
 
 st.header("⭐ Company Watchlist")
 
-company_name = st.text_input(
-    "Company Name"
-)
+company_name = st.text_input("Company Name")
 
-if st.button(
-    "Add To Watchlist"
-):
-
+if st.button("Add To Watchlist"):
     if company_name:
-
-        # UPDATE 3: Pass CURRENT_USER_ID to add_company_to_watchlist
         add_company_to_watchlist(
             CURRENT_USER_ID,
             company_name
         )
-
-        st.success(
-            "Company Added"
-        )
-
+        st.success("Company Added")
         st.rerun()
 
 if not watchlist.empty:
-
-    st.dataframe(
-        watchlist,
-        use_container_width=True
-    )
+    st.dataframe(watchlist, use_container_width=True)
 
 st.divider()
 
@@ -708,56 +657,24 @@ st.header("🚨 Watchlist Matches Today")
 if not watchlist.empty:
 
     watchlist_companies = [
-
-        company.lower()
-
-        for company in
-        watchlist["Company"]
+        c.lower() for c in watchlist["Company"]
     ]
 
     watchlist_jobs = jobs[
-
-        jobs["company"]
-        .str.lower()
-        .isin(
-            watchlist_companies
-        )
-
+        jobs["company"].str.lower().isin(watchlist_companies)
     ]
 
     if not watchlist_jobs.empty:
-
-        watchlist_jobs = (
-            watchlist_jobs
-            .sort_values(
-                by="match_score",
-                ascending=False
-            )
+        watchlist_jobs = watchlist_jobs.sort_values(
+            by="match_score", ascending=False
         )
-
-        st.dataframe(
-            watchlist_jobs,
-            use_container_width=True
-        )
-
-        st.success(
-            f"{len(watchlist_jobs)} "
-            f"watchlist matches found."
-        )
-
+        st.dataframe(watchlist_jobs, use_container_width=True)
+        st.success(f"{len(watchlist_jobs)} watchlist matches found.")
     else:
-
-        st.info(
-            "No watchlist matches "
-            "found today."
-        )
+        st.info("No watchlist matches found today.")
 
 else:
-
-    st.info(
-        "Add companies to "
-        "your watchlist first."
-    )
+    st.info("Add companies to your watchlist first.")
 
 st.divider()
 
@@ -770,37 +687,22 @@ st.header("📊 Watchlist Analytics")
 if not watchlist.empty:
 
     watchlist_companies = [
-
-        company.lower()
-
-        for company in
-        watchlist["Company"]
+        c.lower() for c in watchlist["Company"]
     ]
 
     watchlist_jobs = jobs[
-
-        jobs["company"]
-        .str.lower()
-        .isin(
-            watchlist_companies
-        )
-
+        jobs["company"].str.lower().isin(watchlist_companies)
     ]
 
     if not watchlist_jobs.empty:
 
         company_counts = (
-
             watchlist_jobs["company"]
             .value_counts()
             .reset_index()
-
         )
 
-        company_counts.columns = [
-            "Company",
-            "Jobs Found"
-        ]
+        company_counts.columns = ["Company", "Jobs Found"]
 
         fig_watchlist = px.bar(
             company_counts,
@@ -809,16 +711,10 @@ if not watchlist.empty:
             title="Watchlist Companies Found"
         )
 
-        st.plotly_chart(
-            fig_watchlist,
-            use_container_width=True
-        )
+        st.plotly_chart(fig_watchlist, use_container_width=True)
 
     else:
-
-        st.info(
-            "No watchlist company jobs found."
-        )
+        st.info("No watchlist company jobs found.")
 
 st.divider()
 
@@ -830,10 +726,7 @@ st.header("⭐ Saved Jobs")
 
 if not saved_jobs.empty:
 
-    st.dataframe(
-        saved_jobs,
-        use_container_width=True
-    )
+    st.dataframe(saved_jobs, use_container_width=True)
 
     company_stats = (
         saved_jobs["Company"]
@@ -841,10 +734,7 @@ if not saved_jobs.empty:
         .reset_index()
     )
 
-    company_stats.columns = [
-        "Company",
-        "Saved Jobs"
-    ]
+    company_stats.columns = ["Company", "Saved Jobs"]
 
     fig_saved = px.bar(
         company_stats,
@@ -853,16 +743,10 @@ if not saved_jobs.empty:
         title="Most Saved Companies"
     )
 
-    st.plotly_chart(
-        fig_saved,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_saved, use_container_width=True)
 
 else:
-
-    st.info(
-        "No saved jobs yet."
-    )
+    st.info("No saved jobs yet.")
 
 st.divider()
 
@@ -875,13 +759,9 @@ st.header("📈 Job History Analytics")
 if not history.empty:
 
     daily_jobs = (
-        history.groupby(
-            "scan_date"
-        )
+        history.groupby("scan_date")
         .size()
-        .reset_index(
-            name="jobs_found"
-        )
+        .reset_index(name="jobs_found")
     )
 
     fig_daily = px.line(
@@ -891,15 +771,10 @@ if not history.empty:
         title="Jobs Found Per Day"
     )
 
-    st.plotly_chart(
-        fig_daily,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_daily, use_container_width=True)
 
     avg_scores = (
-        history.groupby(
-            "scan_date"
-        )["match_score"]
+        history.groupby("scan_date")["match_score"]
         .mean()
         .reset_index()
     )
@@ -911,10 +786,7 @@ if not history.empty:
         title="Average Match Score Trend"
     )
 
-    st.plotly_chart(
-        fig_avg,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_avg, use_container_width=True)
 
 st.divider()
 
@@ -926,9 +798,7 @@ st.header("🛠 Update Application Status")
 
 for index, row in applications.iterrows():
 
-    col1, col2, col3 = st.columns(
-        [4, 2, 1]
-    )
+    col1, col2, col3 = st.columns([4, 2, 1])
 
     col1.write(
         f"{row['company']} | {row['job_title']}"
@@ -942,34 +812,28 @@ for index, row in applications.iterrows():
         "Offer"
     ]
 
-    current_index = statuses.index(
-        row["status"]
+    current_index = (
+        statuses.index(row["status"])
+        if row["status"] in statuses
+        else 0
     )
 
     new_status = col2.selectbox(
-    "Status",
-    statuses,
-    index=current_index,
-    key=f"status_{index}"
-)
-
-if col3.button(
-    "Update",
-    key=f"btn_{index}"
-):
-
-    update_status(
-        CURRENT_USER_ID,
-        row["company"],
-        row["job_title"],
-        new_status
+        "Status",
+        statuses,
+        index=current_index,
+        key=f"status_{index}"
     )
 
-    st.success(
-        "Status Updated"
-    )
-
-    st.rerun()
+    if col3.button("Update", key=f"btn_{index}"):
+        update_status(
+            CURRENT_USER_ID,
+            row["company"],
+            row["job_title"],
+            new_status
+        )
+        st.success("Status Updated")
+        st.rerun()
 
 st.divider()
 
@@ -979,180 +843,64 @@ st.divider()
 
 st.header("🎯 AI Career Coach")
 
-try:
-
-    # Read Resume
-    resume_text = read_resume(
-        "resumes/Resume.pdf"
+if not RESUME_AVAILABLE:
+    st.info(
+        "📄 Upload your resume above to unlock the AI Career Coach."
     )
+else:
+    try:
+        resume_skills = get_resume_skills()
 
-    # Extract Skills
-    resume_skills = extract_skills(
-        resume_text
-    )
+        job_records = [
+            {"description": str(row.get("description", ""))}
+            for _, row in jobs.iterrows()
+        ]
 
-    # Prepare Job Records
-    job_records = []
+        advice = generate_career_advice(resume_skills, job_records)
 
-    for _, row in jobs.iterrows():
+        col1, col2 = st.columns(2)
 
-        job_records.append({
+        with col1:
+            st.subheader("📚 Top Missing Skills")
+            if advice["top_missing"]:
+                for skill in advice["top_missing"]:
+                    st.write(f"• {skill}")
+            else:
+                st.success("No major skill gaps detected.")
 
-            "description":
-            str(
-                row.get(
-                    "description",
-                    ""
-                )
-            )
+        with col2:
+            st.subheader("🎓 Recommended Certifications")
+            if advice["certifications"]:
+                for cert in advice["certifications"]:
+                    st.write(f"• {cert}")
+            else:
+                st.success("Current certifications appear sufficient.")
 
+        st.subheader("🧭 Career Roadmap")
+        for step in advice["career_path"]:
+            st.write(f"➡ {step}")
+
+        st.subheader("🛠 Current Resume Skills")
+        skill_df = pd.DataFrame({"Skills": resume_skills})
+        st.dataframe(skill_df, use_container_width=True)
+
+        st.subheader("📊 Learning Priority")
+        score_df = pd.DataFrame({
+            "Category": list(advice["learning_scores"].keys()),
+            "Score": list(advice["learning_scores"].values())
         })
 
-    # Generate Advice
-    advice = (
-        generate_career_advice(
-            resume_skills,
-            job_records
-        )
-    )
-
-    col1, col2 = st.columns(2)
-
-    # =====================
-    # MISSING SKILLS
-    # =====================
-
-    with col1:
-
-        st.subheader(
-            "📚 Top Missing Skills"
+        fig_learning = px.bar(
+            score_df,
+            x="Category",
+            y="Score",
+            title="Learning Priority"
         )
 
-        if advice[
-            "top_missing"
-        ]:
+        st.plotly_chart(fig_learning, use_container_width=True)
 
-            for skill in advice[
-                "top_missing"
-            ]:
-
-                st.write(
-                    f"• {skill}"
-                )
-
-        else:
-
-            st.success(
-                "No major skill gaps detected."
-            )
-
-    # =====================
-    # CERTIFICATIONS
-    # =====================
-
-    with col2:
-
-        st.subheader(
-            "🎓 Recommended Certifications"
-        )
-
-        if advice[
-            "certifications"
-        ]:
-
-            for cert in advice[
-                "certifications"
-            ]:
-
-                st.write(
-                    f"• {cert}"
-                )
-
-        else:
-
-            st.success(
-                "Current certifications appear sufficient."
-            )
-
-    # =====================
-    # CAREER ROADMAP
-    # =====================
-
-    st.subheader(
-        "🧭 Career Roadmap"
-    )
-
-    for step in advice[
-        "career_path"
-    ]:
-
-        st.write(
-            f"➡ {step}"
-        )
-
-    # =====================
-    # CURRENT SKILLS
-    # =====================
-
-    st.subheader(
-        "🛠 Current Resume Skills"
-    )
-
-    skill_df = pd.DataFrame({
-
-        "Skills":
-        resume_skills
-
-    })
-
-    st.dataframe(
-        skill_df,
-        use_container_width=True
-    )
-
-    # =====================
-    # LEARNING PRIORITY
-    # =====================
-
-    st.subheader(
-        "📊 Learning Priority"
-    )
-
-    score_df = pd.DataFrame({
-
-        "Category":
-        list(
-            advice[
-                "learning_scores"
-            ].keys()
-        ),
-
-        "Score":
-        list(
-            advice[
-                "learning_scores"
-            ].values()
-        )
-
-    })
-
-    fig_learning = px.bar(
-        score_df,
-        x="Category",
-        y="Score",
-        title="Learning Priority"
-    )
-
-    st.plotly_chart(
-        fig_learning,
-        use_container_width=True
-    )
-
-except Exception as e:
-
-    st.warning(
-        f"Career Coach Error: {e}"
-    )
+    except Exception as e:
+        st.warning(f"Career Coach Error: {e}")
 
 st.divider()
 
@@ -1163,30 +911,16 @@ st.divider()
 st.header("📈 Job Market Intelligence")
 
 try:
-
-    market_skills = analyze_market(
-        jobs
-    )
+    market_skills = analyze_market(jobs)
 
     if market_skills:
 
         skill_df = pd.DataFrame({
-
-            "Skill":
-            list(
-                market_skills.keys()
-            ),
-
-            "Demand":
-            list(
-                market_skills.values()
-            )
-
+            "Skill": list(market_skills.keys()),
+            "Demand": list(market_skills.values())
         })
 
-        st.subheader(
-            "🔥 Top Skills In Demand"
-        )
+        st.subheader("🔥 Top Skills In Demand")
 
         fig_skills = px.bar(
             skill_df,
@@ -1195,27 +929,14 @@ try:
             title="Top Skills In Market"
         )
 
-        st.plotly_chart(
-            fig_skills,
-            use_container_width=True
-        )
-
-        st.dataframe(
-            skill_df,
-            use_container_width=True
-        )
+        st.plotly_chart(fig_skills, use_container_width=True)
+        st.dataframe(skill_df, use_container_width=True)
 
     else:
-
-        st.info(
-            "No market skill data available."
-        )
+        st.info("No market skill data available.")
 
 except Exception as e:
-
-    st.warning(
-        f"Market Intelligence Error: {e}"
-    )
+    st.warning(f"Market Intelligence Error: {e}")
 
 st.divider()
 
@@ -1226,20 +947,14 @@ st.divider()
 st.header("🏢 Top Hiring Companies")
 
 try:
-
     company_df = (
-
         jobs["company"]
         .value_counts()
         .head(10)
         .reset_index()
-
     )
 
-    company_df.columns = [
-        "Company",
-        "Jobs"
-    ]
+    company_df.columns = ["Company", "Jobs"]
 
     fig_company = px.bar(
         company_df,
@@ -1248,16 +963,10 @@ try:
         title="Top Hiring Companies"
     )
 
-    st.plotly_chart(
-        fig_company,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_company, use_container_width=True)
 
 except Exception as e:
-
-    st.warning(
-        f"Company Analytics Error: {e}"
-    )
+    st.warning(f"Company Analytics Error: {e}")
 
 st.divider()
 
@@ -1268,20 +977,14 @@ st.divider()
 st.header("📍 Top Hiring Locations")
 
 try:
-
     location_df = (
-
         jobs["location"]
         .value_counts()
         .head(10)
         .reset_index()
-
     )
 
-    location_df.columns = [
-        "Location",
-        "Jobs"
-    ]
+    location_df.columns = ["Location", "Jobs"]
 
     fig_location = px.bar(
         location_df,
@@ -1290,16 +993,10 @@ try:
         title="Top Hiring Locations"
     )
 
-    st.plotly_chart(
-        fig_location,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_location, use_container_width=True)
 
 except Exception as e:
-
-    st.warning(
-        f"Location Analytics Error: {e}"
-    )
+    st.warning(f"Location Analytics Error: {e}")
 
 st.divider()
 
@@ -1310,53 +1007,24 @@ st.divider()
 st.header("🔔 Follow-Up Reminders")
 
 try:
-
-    reminders = get_followup_jobs(
-        applications
-    )
+    reminders = get_followup_jobs(applications)
 
     if reminders:
-
-        reminder_df = pd.DataFrame(
-            reminders
-        )
-
-        st.warning(
-            f"{len(reminders)} applications "
-            f"need follow-up."
-        )
-
-        st.dataframe(
-            reminder_df,
-            use_container_width=True
-        )
+        reminder_df = pd.DataFrame(reminders)
+        st.warning(f"{len(reminders)} applications need follow-up.")
+        st.dataframe(reminder_df, use_container_width=True)
 
         for reminder in reminders:
-
             st.info(
-
-                f"Follow up with "
-                f"{reminder['company']} "
-
-                f"for "
-
-                f"{reminder['job_title']} "
-
+                f"Follow up with {reminder['company']} "
+                f"for {reminder['job_title']} "
                 f"({reminder['days']} days ago)"
-
             )
-
     else:
-
-        st.success(
-            "No follow-ups required."
-        )
+        st.success("No follow-ups required.")
 
 except Exception as e:
-
-    st.warning(
-        f"Reminder Error: {e}"
-    )
+    st.warning(f"Reminder Error: {e}")
 
 st.divider()
 
@@ -1366,119 +1034,58 @@ st.divider()
 
 st.header("🎤 Interview Readiness Score")
 
-try:
-
-    resume_text = read_resume(
-        "resumes/Resume.pdf"
+if not RESUME_AVAILABLE:
+    st.info(
+        "📄 Upload your resume above to see your Interview Readiness Score."
     )
+else:
+    try:
+        resume_skills = get_resume_skills()
+        readiness = calculate_interview_readiness(resume_skills)
 
-    resume_skills = extract_skills(
-        resume_text
-    )
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Overall", f"{readiness['overall']}%")
+        col2.metric("Networking", f"{readiness['networking']}%")
+        col3.metric("Security", f"{readiness['security']}%")
+        col4.metric("Automation", f"{readiness['automation']}%")
+        col5.metric("Cloud", f"{readiness['cloud']}%")
 
-    readiness = (
-        calculate_interview_readiness(
-            resume_skills
-        )
-    )
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    col1.metric(
-        "Overall",
-        f"{readiness['overall']}%"
-    )
-
-    col2.metric(
-        "Networking",
-        f"{readiness['networking']}%"
-    )
-
-    col3.metric(
-        "Security",
-        f"{readiness['security']}%"
-    )
-
-    col4.metric(
-        "Automation",
-        f"{readiness['automation']}%"
-    )
-
-    col5.metric(
-        "Cloud",
-        f"{readiness['cloud']}%"
-    )
-
-    score_df = pd.DataFrame({
-
-        "Category": [
-
-            "Networking",
-            "Security",
-            "Automation",
-            "Cloud"
-
-        ],
-
-        "Score": [
-
-            readiness[
-                "networking"
-            ],
-
-            readiness[
-                "security"
-            ],
-
-            readiness[
-                "automation"
-            ],
-
-            readiness[
-                "cloud"
+        score_df = pd.DataFrame({
+            "Category": ["Networking", "Security", "Automation", "Cloud"],
+            "Score": [
+                readiness["networking"],
+                readiness["security"],
+                readiness["automation"],
+                readiness["cloud"]
             ]
-        ]
-    })
+        })
 
-    fig_readiness = px.bar(
-        score_df,
-        x="Category",
-        y="Score",
-        title="Interview Readiness Breakdown"
-    )
-
-    st.plotly_chart(
-        fig_readiness,
-        use_container_width=True
-    )
-
-    st.subheader(
-        "📌 Recommendation"
-    )
-
-    if readiness["overall"] >= 80:
-
-        st.success(
-            "Interview Ready. Focus on mock interviews and advanced topics."
+        fig_readiness = px.bar(
+            score_df,
+            x="Category",
+            y="Score",
+            title="Interview Readiness Breakdown"
         )
 
-    elif readiness["overall"] >= 60:
+        st.plotly_chart(fig_readiness, use_container_width=True)
 
-        st.warning(
-            "Good foundation. Improve missing technical skills before interviews."
-        )
+        st.subheader("📌 Recommendation")
 
-    else:
+        if readiness["overall"] >= 80:
+            st.success(
+                "Interview Ready. Focus on mock interviews and advanced topics."
+            )
+        elif readiness["overall"] >= 60:
+            st.warning(
+                "Good foundation. Improve missing technical skills before interviews."
+            )
+        else:
+            st.error(
+                "Significant skill gaps detected. Focus on learning and certifications."
+            )
 
-        st.error(
-            "Significant skill gaps detected. Focus on learning and certifications."
-        )
-
-except Exception as e:
-
-    st.warning(
-        f"Interview Readiness Error: {e}"
-    )
+    except Exception as e:
+        st.warning(f"Interview Readiness Error: {e}")
 
 st.divider()
 
@@ -1488,145 +1095,68 @@ st.divider()
 
 st.header("💰 Salary Intelligence")
 
-try:
-
-    resume_text = read_resume(
-        "resumes/Resume.pdf"
-    )
-
-    resume_skills = extract_skills(
-        resume_text
-    )
-
-    readiness = (
-        calculate_interview_readiness(
-            resume_skills
-        )
-    )
-
-    salary_info = (
-        get_salary_insights(
-            readiness[
-                "overall"
-            ]
-        )
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-
-        st.metric(
-            "Current Role",
-            salary_info[
-                "current_role"
-            ]
-        )
-
-    with col2:
-
-        st.metric(
-            "Recommended Role",
-            salary_info[
-                "recommended_role"
-            ]
-        )
-
-    with col3:
-
-        st.metric(
-            "Expected Salary",
-            salary_info[
-                "salary_range"
-            ]
-        )
-
-    st.subheader(
-        "📈 Career Growth Roadmap"
-    )
-
-    roadmap_df = pd.DataFrame({
-
-        "Career Stage": [
-
-            salary_info[
-                "current_role"
-            ],
-
-            salary_info[
-                "recommended_role"
-            ],
-
-            salary_info[
-                "next_role"
-            ]
-
-        ],
-
-        "Salary": [
-
-            5,
-
-            10,
-
-            18
-
-        ]
-
-    })
-
-    fig_salary = px.line(
-        roadmap_df,
-        x="Career Stage",
-        y="Salary",
-        markers=True,
-        title="Salary Growth Roadmap (LPA)"
-    )
-
-    st.plotly_chart(
-        fig_salary,
-        use_container_width=True
-    )
-
-    st.subheader(
-        "🎯 Career Recommendation"
-    )
-
+if not RESUME_AVAILABLE:
     st.info(
-
-        f"Based on your interview readiness score of "
-
-        f"{readiness['overall']}%, "
-
-        f"your next target role should be "
-
-        f"{salary_info['recommended_role']} "
-
-        f"with an expected salary range of "
-
-        f"{salary_info['salary_range']}."
-
+        "📄 Upload your resume above to view Salary Intelligence."
     )
+else:
+    try:
+        resume_skills = get_resume_skills()
+        readiness = calculate_interview_readiness(resume_skills)
+        salary_info = get_salary_insights(readiness["overall"])
 
-    st.subheader(
-        "🚀 Next Career Step"
-    )
+        col1, col2, col3 = st.columns(3)
 
-    st.success(
+        with col1:
+            st.metric("Current Role", salary_info["current_role"])
 
-        f"Target Role: "
-        f"{salary_info['next_role']} | "
+        with col2:
+            st.metric("Recommended Role", salary_info["recommended_role"])
 
-        f"Expected Salary: "
-        f"{salary_info['next_salary']}"
+        with col3:
+            st.metric("Expected Salary", salary_info["salary_range"])
 
-    )
+        st.subheader("📈 Career Growth Roadmap")
 
-except Exception as e:
+        roadmap_df = pd.DataFrame({
+            "Career Stage": [
+                salary_info["current_role"],
+                salary_info["recommended_role"],
+                salary_info["next_role"]
+            ],
+            "Salary": [5, 10, 18]
+        })
 
-    st.warning(
-        f"Salary Intelligence Error: {e}"
-    )
+        fig_salary = px.line(
+            roadmap_df,
+            x="Career Stage",
+            y="Salary",
+            markers=True,
+            title="Salary Growth Roadmap (LPA)"
+        )
+
+        st.plotly_chart(fig_salary, use_container_width=True)
+
+        st.subheader("🎯 Career Recommendation")
+
+        st.info(
+            f"Based on your interview readiness score of "
+            f"{readiness['overall']}%, "
+            f"your next target role should be "
+            f"{salary_info['recommended_role']} "
+            f"with an expected salary range of "
+            f"{salary_info['salary_range']}."
+        )
+
+        st.subheader("🚀 Next Career Step")
+
+        st.success(
+            f"Target Role: {salary_info['next_role']} | "
+            f"Expected Salary: {salary_info['next_salary']}"
+        )
+
+    except Exception as e:
+        st.warning(f"Salary Intelligence Error: {e}")
 
 st.divider()
 
@@ -1636,72 +1166,32 @@ st.divider()
 
 st.header("📚 Auto Learning Planner")
 
-try:
-
-    resume_text = read_resume(
-        "resumes/Resume.pdf"
+if not RESUME_AVAILABLE:
+    st.info(
+        "📄 Upload your resume above to generate your Learning Plan."
     )
+else:
+    try:
+        resume_skills = get_resume_skills()
 
-    resume_skills = extract_skills(
-        resume_text
-    )
+        job_records = [
+            {"description": str(row.get("description", ""))}
+            for _, row in jobs.iterrows()
+        ]
 
-    job_records = []
+        advice = generate_career_advice(resume_skills, job_records)
+        learning_plan = generate_learning_plan(advice["top_missing"])
 
-    for _, row in jobs.iterrows():
+        st.subheader("🎯 Personalized Learning Roadmap")
 
-        job_records.append({
+        for item in learning_plan:
+            st.success(item)
 
-            "description":
-            str(
-                row.get(
-                    "description",
-                    ""
-                )
-            )
+        plan_df = pd.DataFrame({"Learning Plan": learning_plan})
+        st.dataframe(plan_df, use_container_width=True)
 
-        })
-
-    advice = generate_career_advice(
-        resume_skills,
-        job_records
-    )
-
-    learning_plan = (
-        generate_learning_plan(
-            advice[
-                "top_missing"
-            ]
-        )
-    )
-
-    st.subheader(
-        "🎯 Personalized Learning Roadmap"
-    )
-
-    for item in learning_plan:
-
-        st.success(
-            item
-        )
-
-    plan_df = pd.DataFrame({
-
-        "Learning Plan":
-        learning_plan
-
-    })
-
-    st.dataframe(
-        plan_df,
-        use_container_width=True
-    )
-
-except Exception as e:
-
-    st.warning(
-        f"Learning Planner Error: {e}"
-    )
+    except Exception as e:
+        st.warning(f"Learning Planner Error: {e}")
 
 st.divider()
 
@@ -1712,53 +1202,31 @@ st.divider()
 st.header("🎤 AI Mock Interview")
 
 try:
-
     if "mock_questions" not in st.session_state:
-
         st.session_state.mock_questions = []
 
-    if st.button(
-        "Generate Mock Interview"
-    ):
-
-        st.session_state.mock_questions = (
-            generate_mock_questions()
-        )
+    if st.button("Generate Mock Interview"):
+        st.session_state.mock_questions = generate_mock_questions()
 
     if st.session_state.mock_questions:
 
         answers = []
 
-        st.subheader(
-            "Interview Questions"
-        )
+        st.subheader("Interview Questions")
 
         for i, question in enumerate(
             st.session_state.mock_questions
         ):
-
-            st.write(
-                f"Q{i+1}. {question}"
-            )
-
+            st.write(f"Q{i+1}. {question}")
             answer = st.text_area(
                 f"Answer {i+1}",
                 key=f"answer_{i}"
             )
+            answers.append(answer)
 
-            answers.append(
-                answer
-            )
+        if st.button("Evaluate Interview"):
 
-        if st.button(
-            "Evaluate Interview"
-        ):
-
-            result = (
-                evaluate_answers(
-                    answers
-                )
-            )
+            result = evaluate_answers(answers)
 
             st.metric(
                 "Interview Score",
@@ -1766,50 +1234,22 @@ try:
             )
 
             if result["score"] >= 80:
-
-                st.success(
-                    "Excellent Interview Performance"
-                )
-
+                st.success("Excellent Interview Performance")
             elif result["score"] >= 60:
-
-                st.warning(
-                    "Good Performance - Improve Some Areas"
-                )
-
+                st.warning("Good Performance - Improve Some Areas")
             else:
+                st.error("Needs Improvement")
 
-                st.error(
-                    "Needs Improvement"
-                )
+            st.subheader("Feedback")
 
-            st.subheader(
-                "Feedback"
-            )
-
-            if result[
-                "feedback"
-            ]:
-
-                for item in result[
-                    "feedback"
-                ]:
-
-                    st.write(
-                        f"• {item}"
-                    )
-
+            if result["feedback"]:
+                for item in result["feedback"]:
+                    st.write(f"• {item}")
             else:
-
-                st.success(
-                    "All answers look detailed."
-                )
+                st.success("All answers look detailed.")
 
 except Exception as e:
-
-    st.warning(
-        f"Mock Interview Error: {e}"
-    )
+    st.warning(f"Mock Interview Error: {e}")
 
 st.divider()
 
@@ -1819,234 +1259,95 @@ st.divider()
 
 st.header("📊 Executive Dashboard")
 
-try:
-
-    # Resume Skills
-    resume_text = read_resume(
-        "resumes/Resume.pdf"
+if not RESUME_AVAILABLE:
+    st.info(
+        "📄 Upload your resume above to view the Executive Dashboard."
     )
+else:
+    try:
+        resume_skills = get_resume_skills()
 
-    resume_skills = extract_skills(
-        resume_text
-    )
+        job_records = [
+            {"description": str(row.get("description", ""))}
+            for _, row in jobs.iterrows()
+        ]
 
-    # Career Coach
-    job_records = []
+        advice = generate_career_advice(resume_skills, job_records)
+        readiness = calculate_interview_readiness(resume_skills)
+        salary_info = get_salary_insights(readiness["overall"])
 
-    for _, row in jobs.iterrows():
+        total_jobs = len(jobs)
+        applications_count = len(applications)
+        interviews = len(
+            applications[applications["status"] == "Interview"]
+        )
+        offers = len(
+            applications[applications["status"] == "Offer"]
+        )
+        high_match_jobs = len(
+            jobs[jobs["match_score"] >= 60]
+        )
 
-        job_records.append({
-
-            "description":
-            str(
-                row.get(
-                    "description",
-                    ""
-                )
+        success_rate = 0
+        if applications_count > 0:
+            success_rate = round(
+                (interviews + offers) / applications_count * 100, 2
             )
 
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+
+        col1.metric("Jobs", total_jobs)
+        col2.metric("High Match", high_match_jobs)
+        col3.metric("Applications", applications_count)
+        col4.metric("Interviews", interviews)
+        col5.metric("Offers", offers)
+        col6.metric("Success %", f"{success_rate}%")
+
+        st.divider()
+
+        career_score = round(
+            (readiness["overall"] + success_rate) / 2, 2
+        )
+
+        st.metric("🎯 Career Score", f"{career_score}%")
+
+        st.divider()
+
+        summary = generate_executive_summary(
+            readiness["overall"],
+            salary_info,
+            advice["top_missing"]
+        )
+
+        st.subheader("📋 Executive Summary")
+        st.info(summary)
+
+        health_df = pd.DataFrame({
+            "Category": [
+                "Interview Readiness",
+                "Career Score",
+                "Market Alignment",
+                "Learning Progress"
+            ],
+            "Score": [
+                readiness["overall"],
+                career_score,
+                80,
+                75
+            ]
         })
 
-    advice = generate_career_advice(
-        resume_skills,
-        job_records
-    )
-
-    # Interview Readiness
-    readiness = (
-        calculate_interview_readiness(
-            resume_skills
-        )
-    )
-
-    # Salary Intelligence
-    salary_info = (
-        get_salary_insights(
-            readiness["overall"]
-        )
-    )
-
-    # KPI Metrics
-    total_jobs = len(jobs)
-
-    applications_count = len(
-        applications
-    )
-
-    interviews = len(
-
-        applications[
-            applications["status"]
-            == "Interview"
-        ]
-
-    )
-
-    offers = len(
-
-        applications[
-            applications["status"]
-            == "Offer"
-        ]
-
-    )
-
-    high_match_jobs = len(
-
-        jobs[
-            jobs["match_score"] >= 60
-        ]
-
-    )
-
-    success_rate = 0
-
-    if applications_count > 0:
-
-        success_rate = round(
-
-            (
-                interviews
-                +
-                offers
-            )
-            /
-            applications_count
-            * 100,
-
-            2
-
+        fig_health = px.bar(
+            health_df,
+            x="Category",
+            y="Score",
+            title="Career Health Dashboard"
         )
 
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+        st.plotly_chart(fig_health, use_container_width=True)
 
-    col1.metric(
-        "Jobs",
-        total_jobs
-    )
-
-    col2.metric(
-        "High Match",
-        high_match_jobs
-    )
-
-    col3.metric(
-        "Applications",
-        applications_count
-    )
-
-    col4.metric(
-        "Interviews",
-        interviews
-    )
-
-    col5.metric(
-        "Offers",
-        offers
-    )
-
-    col6.metric(
-        "Success %",
-        f"{success_rate}%"
-    )
-
-    st.divider()
-
-    # Career Score
-
-    career_score = round(
-
-        (
-            readiness["overall"]
-            +
-            success_rate
-        ) / 2,
-
-        2
-
-    )
-
-    st.metric(
-        "🎯 Career Score",
-        f"{career_score}%"
-    )
-
-    st.divider()
-
-    # Executive Summary
-
-    summary = (
-        generate_executive_summary(
-
-            readiness["overall"],
-
-            salary_info,
-
-            advice["top_missing"]
-
-        )
-    )
-
-    st.subheader(
-        "📋 Executive Summary"
-    )
-
-    st.info(
-        summary
-    )
-
-    # Health Score
-
-    health_df = pd.DataFrame({
-
-        "Category": [
-
-            "Interview Readiness",
-
-            "Career Score",
-
-            "Market Alignment",
-
-            "Learning Progress"
-
-        ],
-
-        "Score": [
-
-            readiness["overall"],
-
-            career_score,
-
-            80,
-
-            75
-
-        ]
-
-    })
-
-    fig_health = px.bar(
-
-        health_df,
-
-        x="Category",
-
-        y="Score",
-
-        title="Career Health Dashboard"
-
-    )
-
-    st.plotly_chart(
-        fig_health,
-        use_container_width=True
-    )
-
-except Exception as e:
-
-    st.warning(
-        f"Executive Dashboard Error: {e}"
-    )
+    except Exception as e:
+        st.warning(f"Executive Dashboard Error: {e}")
 
 st.divider()
 
@@ -2056,34 +1357,17 @@ st.divider()
 
 st.header("👥 Recruiter CRM")
 
-st.subheader(
-    "➕ Add Recruiter"
-)
+st.subheader("➕ Add Recruiter")
 
-with st.form(
-    "recruiter_form"
-):
+with st.form("recruiter_form"):
 
-    recruiter_name = st.text_input(
-        "Recruiter Name"
-    )
-
-    company = st.text_input(
-        "Company"
-    )
-
-    email = st.text_input(
-        "Email"
-    )
-
-    linkedin = st.text_input(
-        "LinkedIn URL"
-    )
+    recruiter_name = st.text_input("Recruiter Name")
+    company = st.text_input("Company")
+    email = st.text_input("Email")
+    linkedin = st.text_input("LinkedIn URL")
 
     status = st.selectbox(
-
         "Status",
-
         [
             "New",
             "Contacted",
@@ -2091,42 +1375,23 @@ with st.form(
             "Interview Scheduled",
             "Closed"
         ]
-
     )
 
-    notes = st.text_area(
-        "Notes"
-    )
+    notes = st.text_area("Notes")
 
-    submitted = st.form_submit_button(
-        "Save Recruiter"
-    )
+    submitted = st.form_submit_button("Save Recruiter")
 
     if submitted:
-
-        # UPDATE 2: Pass CURRENT_USER_ID to add_recruiter
         add_recruiter(
-
             CURRENT_USER_ID,
-
             recruiter_name,
-
             company,
-
             email,
-
             linkedin,
-
             status,
-
             notes
-
         )
-
-        st.success(
-            "Recruiter Added Successfully"
-        )
-
+        st.success("Recruiter Added Successfully")
         st.rerun()
 
 st.divider()
@@ -2135,22 +1400,12 @@ st.divider()
 # RECRUITER DATABASE
 # =====================================
 
-st.subheader(
-    "📋 Recruiter Database"
-)
+st.subheader("📋 Recruiter Database")
 
 if not recruiters.empty:
-
-    st.dataframe(
-        recruiters,
-        use_container_width=True
-    )
-
+    st.dataframe(recruiters, use_container_width=True)
 else:
-
-    st.info(
-        "No recruiters added yet."
-    )
+    st.info("No recruiters added yet.")
 
 st.divider()
 
@@ -2158,85 +1413,44 @@ st.divider()
 # RECRUITER ANALYTICS
 # =====================================
 
-st.subheader(
-    "📊 Recruiter Analytics"
-)
+st.subheader("📊 Recruiter Analytics")
 
 if not recruiters.empty:
 
     status_df = (
-
-        recruiters[
-            "Status"
-        ]
-
+        recruiters["Status"]
         .value_counts()
-
         .reset_index()
-
     )
 
-    status_df.columns = [
-
-        "Status",
-        "Count"
-
-    ]
+    status_df.columns = ["Status", "Count"]
 
     fig_status = px.pie(
-
         status_df,
-
         names="Status",
-
         values="Count",
-
         title="Recruiter Pipeline"
-
     )
 
-    st.plotly_chart(
-        fig_status,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_status, use_container_width=True)
 
     company_df = (
-
-        recruiters[
-            "Company"
-        ]
-
+        recruiters["Company"]
         .value_counts()
-
         .head(10)
-
         .reset_index()
-
     )
 
-    company_df.columns = [
-
-        "Company",
-        "Recruiters"
-
-    ]
+    company_df.columns = ["Company", "Recruiters"]
 
     fig_company = px.bar(
-
         company_df,
-
         x="Company",
-
         y="Recruiters",
-
         title="Top Recruiter Companies"
-
     )
 
-    st.plotly_chart(
-        fig_company,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_company, use_container_width=True)
 
 st.divider()
 
@@ -2246,123 +1460,57 @@ st.divider()
 
 st.header("🧠 AI Resume Optimizer")
 
-try:
-
-    resume_text = read_resume(
-        "resumes/Resume.pdf"
+if not RESUME_AVAILABLE:
+    st.info(
+        "📄 Upload your resume above to use the AI Resume Optimizer."
     )
+else:
+    try:
+        resume_skills = get_resume_skills()
 
-    resume_skills = extract_skills(
-        resume_text
-    )
+        if not jobs.empty:
 
-    if not jobs.empty:
+            selected_job = st.selectbox(
+                "Select Job For Optimization",
+                jobs["job_title"]
+            )
 
-        selected_job = st.selectbox(
+            selected_row = jobs[
+                jobs["job_title"] == selected_job
+            ].iloc[0]
 
-            "Select Job For Optimization",
-
-            jobs["job_title"]
-
-        )
-
-        selected_row = jobs[
-            jobs["job_title"]
-            ==
-            selected_job
-        ].iloc[0]
-
-        optimization = (
-            optimize_resume(
-
+            optimization = optimize_resume(
                 resume_skills,
-
-                selected_row[
-                    "description"
-                ]
-
+                selected_row["description"]
             )
-        )
 
-        st.subheader(
-            "🔍 Missing Keywords"
-        )
+            st.subheader("🔍 Missing Keywords")
 
-        if optimization[
-            "missing_keywords"
-        ]:
+            if optimization["missing_keywords"]:
+                for keyword in optimization["missing_keywords"]:
+                    st.warning(keyword)
+            else:
+                st.success("No missing keywords found.")
 
-            for keyword in optimization[
-                "missing_keywords"
-            ]:
+            st.subheader("💡 Resume Suggestions")
 
-                st.warning(
-                    keyword
-                )
+            if optimization["suggestions"]:
+                for suggestion in optimization["suggestions"]:
+                    st.info(suggestion)
+            else:
+                st.success("Resume is well aligned.")
+
+            st.subheader("📊 Optimization Score")
+
+            total_keywords = len(optimization["missing_keywords"])
+            score = max(0, 100 - (total_keywords * 5))
+            st.metric("Optimization Score", f"{score}%")
 
         else:
+            st.info("No jobs available for analysis.")
 
-            st.success(
-                "No missing keywords found."
-            )
-
-        st.subheader(
-            "💡 Resume Suggestions"
-        )
-
-        if optimization[
-            "suggestions"
-        ]:
-
-            for suggestion in optimization[
-                "suggestions"
-            ]:
-
-                st.info(
-                    suggestion
-                )
-
-        else:
-
-            st.success(
-                "Resume is well aligned."
-            )
-
-        st.subheader(
-            "📊 Optimization Score"
-        )
-
-        total_keywords = len(
-
-            optimization[
-                "missing_keywords"
-            ]
-
-        )
-
-        score = max(
-            0,
-            100 - (
-                total_keywords * 5
-            )
-        )
-
-        st.metric(
-            "Optimization Score",
-            f"{score}%"
-        )
-
-    else:
-
-        st.info(
-            "No jobs available for analysis."
-        )
-
-except Exception as e:
-
-    st.warning(
-        f"Resume Optimizer Error: {e}"
-    )
+    except Exception as e:
+        st.warning(f"Resume Optimizer Error: {e}")
 
 st.divider()
 
@@ -2372,109 +1520,58 @@ st.divider()
 
 st.header("💼 LinkedIn Intelligence")
 
-try:
-
-    resume_text = read_resume(
-        "resumes/Resume.pdf"
+if not RESUME_AVAILABLE:
+    st.info(
+        "📄 Upload your resume above to generate LinkedIn Intelligence."
     )
+else:
+    try:
+        resume_skills = get_resume_skills()
+        linkedin_profile = generate_linkedin_profile(resume_skills)
 
-    resume_skills = extract_skills(
-        resume_text
-    )
+        col1, col2 = st.columns(2)
 
-    linkedin_profile = (
-        generate_linkedin_profile(
-            resume_skills
-        )
-    )
+        with col1:
+            st.subheader("🏷 LinkedIn Headline")
+            st.success(linkedin_profile["headline"])
 
-    col1, col2 = st.columns(2)
+        with col2:
+            st.subheader("📊 Profile Strength")
+            st.metric(
+                "LinkedIn Score",
+                f"{linkedin_profile['score']}%"
+            )
 
-    with col1:
+        st.divider()
 
-        st.subheader(
-            "🏷 LinkedIn Headline"
-        )
-
-        st.success(
-            linkedin_profile[
-                "headline"
-            ]
-        )
-
-    with col2:
-
-        st.subheader(
-            "📊 Profile Strength"
+        st.subheader("📝 About Section")
+        st.text_area(
+            "LinkedIn About",
+            value=linkedin_profile["about"],
+            height=200
         )
 
-        st.metric(
-            "LinkedIn Score",
-            f"{linkedin_profile['score']}%"
+        st.divider()
+
+        st.subheader("⭐ Recommended Skills")
+
+        skills_df = pd.DataFrame({
+            "Skills": linkedin_profile["skills"]
+        })
+
+        st.dataframe(skills_df, use_container_width=True)
+
+        fig_skills = px.bar(
+            skills_df,
+            x="Skills",
+            y=[1] * len(skills_df),
+            title="Recommended LinkedIn Skills"
         )
 
-    st.divider()
+        st.plotly_chart(fig_skills, use_container_width=True)
 
-    st.subheader(
-        "📝 About Section"
-    )
-
-    st.text_area(
-
-        "LinkedIn About",
-
-        value=linkedin_profile[
-            "about"
-        ],
-
-        height=200
-
-    )
-
-    st.divider()
-
-    st.subheader(
-        "⭐ Recommended Skills"
-    )
-
-    skills_df = pd.DataFrame({
-
-        "Skills":
-        linkedin_profile[
-            "skills"
-        ]
-
-    })
-
-    st.dataframe(
-        skills_df,
-        use_container_width=True
-    )
-
-    fig_skills = px.bar(
-
-        skills_df,
-
-        x="Skills",
-
-        y=[1] * len(
-            skills_df
-        ),
-
-        title="Recommended LinkedIn Skills"
-
-    )
-
-    st.plotly_chart(
-        fig_skills,
-        use_container_width=True
-    )
-
-except Exception as e:
-
-    st.warning(
-        f"LinkedIn Intelligence Error: {e}"
-    )
+    except Exception as e:
+        st.warning(f"LinkedIn Intelligence Error: {e}")
 
 st.divider()
 
@@ -2484,7 +1581,4 @@ st.divider()
 
 st.header("📝 Applications")
 
-st.dataframe(
-    applications,
-    use_container_width=True
-)
+st.dataframe(applications, use_container_width=True)

@@ -61,6 +61,13 @@ def login_user(
     conn = get_connection()
     cursor = conn.cursor()
 
+    print("USERNAME:", username)
+
+    print(
+        "HASH:",
+        hash_password(password)
+    )
+
     cursor.execute(
         """
         SELECT
@@ -77,6 +84,8 @@ def login_user(
     )
 
     user = cursor.fetchone()
+
+    print("USER:", user)
 
     conn.close()
 
