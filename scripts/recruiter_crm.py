@@ -6,13 +6,14 @@ from scripts.database import (
 from datetime import datetime
 
 
-def save_job_to_watchlist(
+def add_recruiter(
         user_id,
-        job_title,
+        recruiter_name,
         company,
-        location,
-        match_score,
-        apply_url
+        email,
+        linkedin,
+        status,
+        notes=""
 ):
 
     initialize_database()
@@ -21,32 +22,43 @@ def save_job_to_watchlist(
     cursor = conn.cursor()
 
     cursor.execute("""
-    INSERT INTO saved_jobs
-    (
+
+    INSERT INTO recruiters (
+
         user_id,
-        job_title,
+        recruiter_name,
         company,
-        location,
-        match_score,
-        apply_url,
-        saved_date
+        email,
+        linkedin,
+        status,
+        notes,
+        last_contact
+
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+
     """, (
+
         user_id,
-        job_title,
+        recruiter_name,
         company,
-        location,
-        float(match_score),
-        apply_url,
-        datetime.now().strftime("%Y-%m-%d")
+        email,
+        linkedin,
+        status,
+        notes,
+
+        datetime.now().strftime(
+            "%Y-%m-%d"
+        )
+
     ))
 
     conn.commit()
     conn.close()
 
 
-def get_saved_jobs(
+def get_recruiters(
         user_id
 ):
 
@@ -56,16 +68,20 @@ def get_saved_jobs(
     cursor = conn.cursor()
 
     cursor.execute("""
+
     SELECT
-        job_title,
+        recruiter_name,
         company,
-        location,
-        match_score,
-        apply_url,
-        saved_date
-    FROM saved_jobs
+        email,
+        linkedin,
+        status,
+        notes,
+        last_contact
+
+    FROM recruiters
+
     WHERE user_id=?
-    ORDER BY id DESC
+
     """, (
         user_id,
     ))

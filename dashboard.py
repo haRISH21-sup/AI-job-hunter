@@ -4,15 +4,18 @@ import sqlite3
 import plotly.express as px
 
 from scripts.application_tracker import (
-    update_status
+    update_status,
+    get_applications
 )
 
 from scripts.saved_jobs import (
-    save_job_to_watchlist
+    save_job_to_watchlist,
+    get_saved_jobs
 )
 
 from scripts.watchlist import (
-    add_company_to_watchlist
+    add_company_to_watchlist,
+    get_watchlist
 )
 
 from scripts.career_coach import (
@@ -56,10 +59,153 @@ from scripts.executive_dashboard import (
     generate_executive_summary
 )
 
+from scripts.recruiter_crm import (
+    add_recruiter,
+    get_recruiters
+)
+
+from scripts.resume_optimizer import (
+    optimize_resume
+)
+
+from scripts.linkedin_intelligence import (
+    generate_linkedin_profile
+)
+
+from scripts.auth import (
+    register_user,
+    login_user
+)
+
 st.set_page_config(
     page_title="AI Job Hunter",
     layout="wide"
 )
+
+# =====================================
+# AUTHENTICATION
+# =====================================
+
+if "logged_in" not in st.session_state:
+
+    st.session_state.logged_in = False
+
+if "username" not in st.session_state:
+
+    st.session_state.username = None
+
+if "user_id" not in st.session_state:
+
+    st.session_state.user_id = None
+
+
+if not st.session_state.logged_in:
+
+    st.title("🔐 AI Job Hunter Login")
+
+    tab1, tab2 = st.tabs([
+        "Login",
+        "Register"
+    ])
+
+    with tab1:
+
+        username = st.text_input(
+            "Username",
+            key="login_user"
+        )
+
+        password = st.text_input(
+            "Password",
+            type="password",
+            key="login_pass"
+        )
+
+        if st.button(
+            "Login"
+        ):
+
+            user = login_user(
+                username,
+                password
+            )
+
+            if user:
+
+                st.session_state.logged_in = True
+
+                st.session_state.user_id = user[0]
+
+                st.session_state.username = user[1]
+
+                st.success(
+                    "Login Successful"
+                )
+
+                st.rerun()
+
+            else:
+
+                st.error(
+                    "Invalid Username or Password"
+                )
+
+    with tab2:
+
+        new_username = st.text_input(
+            "New Username",
+            key="reg_user"
+        )
+
+        new_password = st.text_input(
+            "New Password",
+            type="password",
+            key="reg_pass"
+        )
+
+        if st.button(
+            "Register"
+        ):
+
+            success = register_user(
+                new_username,
+                new_password
+            )
+
+            if success:
+
+                st.success(
+                    "Registration Successful"
+                )
+
+            else:
+
+                st.error(
+                    "Username Already Exists"
+                )
+
+    st.stop()
+
+
+st.sidebar.success(
+    f"Logged in as: {st.session_state.username}"
+)
+
+CURRENT_USER_ID = (
+    st.session_state.user_id
+)
+
+if st.sidebar.button(
+    "Logout"
+):
+
+    st.session_state.logged_in = False
+
+    st.session_state.user_id = None
+
+    st.session_state.username = None
+
+    st.rerun()
 
 st.title("🚀 AI Job Hunter Dashboard")
 
@@ -67,23 +213,17 @@ conn = sqlite3.connect(
     "database/jobhunter.db"
 )
 
-applications = pd.read_sql_query(
-    "SELECT * FROM applications",
-    conn
-)
-
-jobs = pd.read_sql_query(
-    """
-   SELECT
-    job_title,
-    company,
-    location,
-    description,
-    match_score,
-    apply_url
-   FROM jobs
-    """,
-    conn
+applications = pd.DataFrame(
+    get_applications(
+        CURRENT_USER_ID
+    ),
+    columns=[
+        "company",
+        "job_title",
+        "date_applied",
+        "status",
+        "notes"
+    ]
 )
 
 history = pd.read_sql_query(
@@ -98,23 +238,57 @@ history = pd.read_sql_query(
     conn
 )
 
-saved_jobs = pd.read_sql_query(
-    """
-    SELECT *
-    FROM saved_jobs
-    """,
-    conn
-)
-
-watchlist = pd.read_sql_query(
-    """
-    SELECT *
-    FROM watchlist
-    """,
-    conn
-)
-
 conn.close()
+
+# =====================================
+# UPDATE 1: Load saved jobs with user ID
+# =====================================
+
+saved_jobs = pd.DataFrame(
+    get_saved_jobs(
+        CURRENT_USER_ID
+    ),
+    columns=[
+        "Job Title",
+        "Company",
+        "Location",
+        "Match Score",
+        "Apply URL",
+        "Saved Date"
+    ]
+)
+
+# =====================================
+# UPDATE 4: Load watchlist with user ID
+# =====================================
+
+watchlist = pd.DataFrame(
+    get_watchlist(
+        CURRENT_USER_ID
+    ),
+    columns=[
+        "Company"
+    ]
+)
+
+# =====================================
+# UPDATE 1: Load recruiters with user ID
+# =====================================
+
+recruiters = pd.DataFrame(
+    get_recruiters(
+        CURRENT_USER_ID
+    ),
+    columns=[
+        "Recruiter",
+        "Company",
+        "Email",
+        "LinkedIn",
+        "Status",
+        "Notes",
+        "Last Contact"
+    ]
+)
 
 # =====================================
 # APPLICATION STATISTICS
@@ -396,7 +570,7 @@ if not watchlist.empty:
         company.lower()
 
         for company in
-        watchlist["company"]
+        watchlist["Company"]
     ]
 
     filtered_jobs["priority"] = (
@@ -470,7 +644,9 @@ for index, row in display_jobs.head(20).iterrows():
             key=f"save_{index}"
         ):
 
+            # UPDATE 5: Pass CURRENT_USER_ID to save_job_to_watchlist
             save_job_to_watchlist(
+                CURRENT_USER_ID,
                 row["job_title"],
                 row["company"],
                 row["location"],
@@ -502,7 +678,9 @@ if st.button(
 
     if company_name:
 
+        # UPDATE 3: Pass CURRENT_USER_ID to add_company_to_watchlist
         add_company_to_watchlist(
+            CURRENT_USER_ID,
             company_name
         )
 
@@ -534,7 +712,7 @@ if not watchlist.empty:
         company.lower()
 
         for company in
-        watchlist["company"]
+        watchlist["Company"]
     ]
 
     watchlist_jobs = jobs[
@@ -596,7 +774,7 @@ if not watchlist.empty:
         company.lower()
 
         for company in
-        watchlist["company"]
+        watchlist["Company"]
     ]
 
     watchlist_jobs = jobs[
@@ -658,7 +836,7 @@ if not saved_jobs.empty:
     )
 
     company_stats = (
-        saved_jobs["company"]
+        saved_jobs["Company"]
         .value_counts()
         .reset_index()
     )
@@ -769,28 +947,29 @@ for index, row in applications.iterrows():
     )
 
     new_status = col2.selectbox(
-        "Status",
-        statuses,
-        index=current_index,
-        key=f"status_{index}"
+    "Status",
+    statuses,
+    index=current_index,
+    key=f"status_{index}"
+)
+
+if col3.button(
+    "Update",
+    key=f"btn_{index}"
+):
+
+    update_status(
+        CURRENT_USER_ID,
+        row["company"],
+        row["job_title"],
+        new_status
     )
 
-    if col3.button(
-        "Update",
-        key=f"btn_{index}"
-    ):
+    st.success(
+        "Status Updated"
+    )
 
-        update_status(
-            row["company"],
-            row["job_title"],
-            new_status
-        )
-
-        st.success(
-            "Status Updated"
-        )
-
-        st.rerun()
+    st.rerun()
 
 st.divider()
 
@@ -1867,6 +2046,434 @@ except Exception as e:
 
     st.warning(
         f"Executive Dashboard Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# RECRUITER CRM
+# =====================================
+
+st.header("👥 Recruiter CRM")
+
+st.subheader(
+    "➕ Add Recruiter"
+)
+
+with st.form(
+    "recruiter_form"
+):
+
+    recruiter_name = st.text_input(
+        "Recruiter Name"
+    )
+
+    company = st.text_input(
+        "Company"
+    )
+
+    email = st.text_input(
+        "Email"
+    )
+
+    linkedin = st.text_input(
+        "LinkedIn URL"
+    )
+
+    status = st.selectbox(
+
+        "Status",
+
+        [
+            "New",
+            "Contacted",
+            "Follow Up",
+            "Interview Scheduled",
+            "Closed"
+        ]
+
+    )
+
+    notes = st.text_area(
+        "Notes"
+    )
+
+    submitted = st.form_submit_button(
+        "Save Recruiter"
+    )
+
+    if submitted:
+
+        # UPDATE 2: Pass CURRENT_USER_ID to add_recruiter
+        add_recruiter(
+
+            CURRENT_USER_ID,
+
+            recruiter_name,
+
+            company,
+
+            email,
+
+            linkedin,
+
+            status,
+
+            notes
+
+        )
+
+        st.success(
+            "Recruiter Added Successfully"
+        )
+
+        st.rerun()
+
+st.divider()
+
+# =====================================
+# RECRUITER DATABASE
+# =====================================
+
+st.subheader(
+    "📋 Recruiter Database"
+)
+
+if not recruiters.empty:
+
+    st.dataframe(
+        recruiters,
+        use_container_width=True
+    )
+
+else:
+
+    st.info(
+        "No recruiters added yet."
+    )
+
+st.divider()
+
+# =====================================
+# RECRUITER ANALYTICS
+# =====================================
+
+st.subheader(
+    "📊 Recruiter Analytics"
+)
+
+if not recruiters.empty:
+
+    status_df = (
+
+        recruiters[
+            "Status"
+        ]
+
+        .value_counts()
+
+        .reset_index()
+
+    )
+
+    status_df.columns = [
+
+        "Status",
+        "Count"
+
+    ]
+
+    fig_status = px.pie(
+
+        status_df,
+
+        names="Status",
+
+        values="Count",
+
+        title="Recruiter Pipeline"
+
+    )
+
+    st.plotly_chart(
+        fig_status,
+        use_container_width=True
+    )
+
+    company_df = (
+
+        recruiters[
+            "Company"
+        ]
+
+        .value_counts()
+
+        .head(10)
+
+        .reset_index()
+
+    )
+
+    company_df.columns = [
+
+        "Company",
+        "Recruiters"
+
+    ]
+
+    fig_company = px.bar(
+
+        company_df,
+
+        x="Company",
+
+        y="Recruiters",
+
+        title="Top Recruiter Companies"
+
+    )
+
+    st.plotly_chart(
+        fig_company,
+        use_container_width=True
+    )
+
+st.divider()
+
+# =====================================
+# AI RESUME OPTIMIZER
+# =====================================
+
+st.header("🧠 AI Resume Optimizer")
+
+try:
+
+    resume_text = read_resume(
+        "resumes/Resume.pdf"
+    )
+
+    resume_skills = extract_skills(
+        resume_text
+    )
+
+    if not jobs.empty:
+
+        selected_job = st.selectbox(
+
+            "Select Job For Optimization",
+
+            jobs["job_title"]
+
+        )
+
+        selected_row = jobs[
+            jobs["job_title"]
+            ==
+            selected_job
+        ].iloc[0]
+
+        optimization = (
+            optimize_resume(
+
+                resume_skills,
+
+                selected_row[
+                    "description"
+                ]
+
+            )
+        )
+
+        st.subheader(
+            "🔍 Missing Keywords"
+        )
+
+        if optimization[
+            "missing_keywords"
+        ]:
+
+            for keyword in optimization[
+                "missing_keywords"
+            ]:
+
+                st.warning(
+                    keyword
+                )
+
+        else:
+
+            st.success(
+                "No missing keywords found."
+            )
+
+        st.subheader(
+            "💡 Resume Suggestions"
+        )
+
+        if optimization[
+            "suggestions"
+        ]:
+
+            for suggestion in optimization[
+                "suggestions"
+            ]:
+
+                st.info(
+                    suggestion
+                )
+
+        else:
+
+            st.success(
+                "Resume is well aligned."
+            )
+
+        st.subheader(
+            "📊 Optimization Score"
+        )
+
+        total_keywords = len(
+
+            optimization[
+                "missing_keywords"
+            ]
+
+        )
+
+        score = max(
+            0,
+            100 - (
+                total_keywords * 5
+            )
+        )
+
+        st.metric(
+            "Optimization Score",
+            f"{score}%"
+        )
+
+    else:
+
+        st.info(
+            "No jobs available for analysis."
+        )
+
+except Exception as e:
+
+    st.warning(
+        f"Resume Optimizer Error: {e}"
+    )
+
+st.divider()
+
+# =====================================
+# LINKEDIN INTELLIGENCE
+# =====================================
+
+st.header("💼 LinkedIn Intelligence")
+
+try:
+
+    resume_text = read_resume(
+        "resumes/Resume.pdf"
+    )
+
+    resume_skills = extract_skills(
+        resume_text
+    )
+
+    linkedin_profile = (
+        generate_linkedin_profile(
+            resume_skills
+        )
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.subheader(
+            "🏷 LinkedIn Headline"
+        )
+
+        st.success(
+            linkedin_profile[
+                "headline"
+            ]
+        )
+
+    with col2:
+
+        st.subheader(
+            "📊 Profile Strength"
+        )
+
+        st.metric(
+            "LinkedIn Score",
+            f"{linkedin_profile['score']}%"
+        )
+
+    st.divider()
+
+    st.subheader(
+        "📝 About Section"
+    )
+
+    st.text_area(
+
+        "LinkedIn About",
+
+        value=linkedin_profile[
+            "about"
+        ],
+
+        height=200
+
+    )
+
+    st.divider()
+
+    st.subheader(
+        "⭐ Recommended Skills"
+    )
+
+    skills_df = pd.DataFrame({
+
+        "Skills":
+        linkedin_profile[
+            "skills"
+        ]
+
+    })
+
+    st.dataframe(
+        skills_df,
+        use_container_width=True
+    )
+
+    fig_skills = px.bar(
+
+        skills_df,
+
+        x="Skills",
+
+        y=[1] * len(
+            skills_df
+        ),
+
+        title="Recommended LinkedIn Skills"
+
+    )
+
+    st.plotly_chart(
+        fig_skills,
+        use_container_width=True
+    )
+
+except Exception as e:
+
+    st.warning(
+        f"LinkedIn Intelligence Error: {e}"
     )
 
 st.divider()
