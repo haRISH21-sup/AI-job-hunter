@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+
+database/
+*.db
+
+.env
+
+skill_gap_reports/
+generated_resumes/
+generated_cover_letters/
+
+.streamlit/
